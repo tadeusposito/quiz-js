@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Jovem Senador – Quiz</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --azul: #1a3d6b;
+    --azul-claro: #1e5dbf;
+    --dourado: #c8a84b;
+    --bg: #0d1520;
+    --text: #f0f0f0;
+    --card: #101c30;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .logo { font-size: 13px; color: var(--dourado); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; text-align: center; }
+  h1 { font-size: 22px; color: #fff; text-align: center; margin-bottom: 6px; }
+  .sub { font-size: 14px; color: #7a9cc8; text-align: center; margin-bottom: 32px; }
+
+  /* JOIN SCREEN */
+  #screen-join { width: 100%; max-width: 360px; }
+  .input-group { display: flex; flex-direction: column; gap: 12px; }
+  input[type=text] {
+    padding: 16px 18px; font-size: 17px; border-radius: 12px;
+    border: 2px solid var(--azul); background: var(--card);
+    color: #fff; outline: none; width: 100%;
+    transition: border-color .2s;
+  }
+  input[type=text]:focus { border-color: var(--dourado); }
+  .btn-primary {
+    padding: 16px; font-size: 17px; font-weight: 700; border-radius: 12px;
+    background: var(--azul-claro); color: #fff; border: none; cursor: pointer;
+    transition: background .15s, transform .1s;
+    width: 100%;
+  }
+  .btn-primary:active { transform: scale(0.97); background: var(--azul); }
+  .btn-primary:disabled { background: #444; cursor: not-allowed; }
+
+  /* LOBBY */
+  #screen-lobby { text-align: center; }
+  .waiting-anim {
+    width: 60px; height: 60px; border-radius: 50%;
+    border: 4px solid var(--azul);
+    border-top-color: var(--dourado);
+    animation: spin 1s linear infinite;
+    margin: 0 auto 24px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .participant-name { font-size: 20px; font-weight: 700; color: var(--dourado); margin-bottom: 8px; }
+
+  /* QUESTION */
+  #screen-question { width: 100%; max-width: 400px; }
+  .q-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .q-number { font-size: 13px; color: var(--dourado); font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+  .q-prompt {
+    font-size: 20px; font-weight: 700; text-align: center;
+    background: var(--card); border-radius: 16px;
+    padding: 20px; margin-bottom: 24px;
+    border: 1px solid #1e3860; line-height: 1.4;
+  }
+  .options { display: flex; flex-direction: column; gap: 14px; }
+  .opt-btn {
+    padding: 18px 20px; font-size: 18px; font-weight: 700;
+    border-radius: 14px; border: 2px solid transparent;
+    cursor: pointer; transition: all .15s;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .opt-btn:active:not(:disabled) { transform: scale(0.96); }
+  .opt-btn:disabled { cursor: not-allowed; opacity: 0.7; }
+
+  /* Cores das opções */
+  .opt-0 { background: #1a3a7a; border-color: #2a5abf; color: #fff; }
+  .opt-1 { background: #7a1a1a; border-color: #bf2a2a; color: #fff; }
+  .opt-2 { background: #1a5a2a; border-color: #2abf5a; color: #fff; }
+  .opt-3 { background: #5a4a1a; border-color: #bfa02a; color: #fff; }
+
+  .opt-selected { border-color: var(--dourado) !important; filter: brightness(1.3); }
+  .opt-correct { background: #145214 !important; border-color: #4caf50 !important; }
+  .opt-wrong { background: #521414 !important; border-color: #f44336 !important; }
+
+  .ack-msg {
+    text-align: center; font-size: 15px; color: #7a9cc8;
+    margin-top: 16px; padding: 10px;
+    background: var(--card); border-radius: 10px;
+  }
+
+  /* REVEAL */
+  .reveal-badge {
+    text-align: center; font-size: 17px; font-weight: 700;
+    padding: 14px 20px; border-radius: 12px; margin-top: 20px;
+  }
+  .reveal-correct { background: #1a521a; color: #4caf50; }
+  .reveal-wrong { background: #521a1a; color: #f44336; }
+  .reveal-missed { background: #3a3a1a; color: #ffc107; }
+
+  /* RANKING */
+  #screen-ranking { width: 100%; max-width: 400px; }
+  .ranking-title { text-align: center; font-size: 22px; font-weight: 800; color: var(--dourado); margin-bottom: 20px; }
+  .rank-list { display: flex; flex-direction: column; gap: 10px; }
+  .rank-item {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--card); border-radius: 12px;
+    padding: 14px 16px; border: 1px solid #1e3860;
+  }
+  .rank-item.me { border-color: var(--dourado); background: #162040; }
+  .rank-pos { font-size: 20px; font-weight: 800; width: 30px; text-align: center; }
+  .rank-1 { color: gold; }
+  .rank-2 { color: silver; }
+  .rank-3 { color: #cd7f32; }
+  .rank-name { flex: 1; font-size: 16px; font-weight: 600; }
+  .rank-score { font-size: 14px; color: #7a9cc8; text-align: right; }
+  .rank-pts { font-size: 16px; font-weight: 700; color: var(--dourado); }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- JOIN -->
+<div id="screen-join">
+  <div class="logo">🏛 Senado Federal</div>
+  <h1>Jovem Senador</h1>
+  <p class="sub">Quiz em tempo real</p>
+  <div class="input-group">
+    <input type="text" id="nameInput" placeholder="Seu nome completo" maxlength="40" autocomplete="off" />
+    <button class="btn-primary" id="joinBtn" onclick="joinQuiz()">Entrar no Quiz</button>
+  </div>
+  <p id="joinError" style="color:#f44336;text-align:center;margin-top:12px;font-size:14px;"></p>
+</div>
+
+<!-- LOBBY -->
+<div id="screen-lobby" class="hidden">
+  <div class="waiting-anim"></div>
+  <div class="participant-name" id="lobbyName"></div>
+  <p class="sub">Você está dentro! ✅</p>
+  <p style="color:#7a9cc8;font-size:15px;text-align:center;">Aguardando o início do quiz…</p>
+</div>
+
+<!-- QUESTION -->
+<div id="screen-question" class="hidden">
+  <div class="q-meta">
+    <span class="q-number" id="qNumber"></span>
+  </div>
+  <div class="q-prompt" id="qPrompt"></div>
+  <div class="options" id="optionsContainer"></div>
+  <div class="ack-msg hidden" id="ackMsg"></div>
+  <div id="revealBadge"></div>
+</div>
+
+<!-- RANKING -->
+<div id="screen-ranking" class="hidden">
+  <div class="ranking-title">🏆 Resultado Final</div>
+  <div class="rank-list" id="rankList"></div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  let myName = '';
+  let myAnswer = null; // índice respondido nesta questão
+  let totalQuestions = 0;
+
+  function show(id) {
+    ['screen-join','screen-lobby','screen-question','screen-ranking'].forEach(s => {
+      document.getElementById(s).classList.toggle('hidden', s !== id);
+    });
+  }
+
+  function joinQuiz() {
+    const name = document.getElementById('nameInput').value.trim();
+    if (name.length < 2) {
+      document.getElementById('joinError').textContent = 'Digite seu nome completo.';
+      return;
+    }
+    myName = name;
+    document.getElementById('joinBtn').disabled = true;
+    socket.emit('join', { name });
+  }
+
+  document.getElementById('nameInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') joinQuiz();
+  });
+
+  socket.on('joined', (state) => {
+    document.getElementById('lobbyName').textContent = myName;
+    applyState(state);
+  });
+
+  socket.on('state', applyState);
+
+  function applyState(state) {
+    totalQuestions = state.totalQuestions;
+
+    if (state.phase === 'lobby') {
+      if (myName) {
+        document.getElementById('lobbyName').textContent = myName;
+        show('screen-lobby');
+      }
+      return;
+    }
+
+    if (state.phase === 'finished') {
+      // Tela de suspense — aguardando apresentador revelar o ranking
+      document.getElementById('lobbyName').textContent = myName;
+      document.querySelector('#screen-lobby .waiting-anim').style.borderTopColor = '#c8a84b';
+      document.querySelector('#screen-lobby p.sub').textContent = 'Quiz encerrado! ✅';
+      document.querySelector('#screen-lobby p:last-child').textContent = 'Aguarde o resultado…';
+      show('screen-lobby');
+      return;
+    }
+
+    if (state.phase === 'ranking') {
+      renderRanking(state.ranking);
+      show('screen-ranking');
+      return;
+    }
+
+    if (state.phase === 'question' || state.phase === 'reveal') {
+      renderQuestion(state);
+      show('screen-question');
+    }
+  }
+
+  function renderQuestion(state) {
+    const q = state.question;
+    const qIdx = state.currentIndex;
+
+    // Se mudou de questão, reseta resposta
+    if (renderQuestion._lastIndex !== qIdx) {
+      myAnswer = null;
+      renderQuestion._lastIndex = qIdx;
+      document.getElementById('ackMsg').classList.add('hidden');
+      document.getElementById('revealBadge').innerHTML = '';
+    }
+
+    document.getElementById('qNumber').textContent = `Questão ${qIdx + 1} de ${totalQuestions}`;
+    document.getElementById('qPrompt').textContent = q.prompt;
+
+    const container = document.getElementById('optionsContainer');
+    container.innerHTML = '';
+    q.optionLabels.forEach((label, i) => {
+      const btn = document.createElement('button');
+      btn.className = `opt-btn opt-${i}`;
+      btn.textContent = label;
+
+      if (myAnswer !== null) btn.disabled = true;
+      if (myAnswer === i) btn.classList.add('opt-selected');
+
+      if (state.phase === 'reveal' && q.correctIndex !== null) {
+        btn.disabled = true;
+        if (i === q.correctIndex) btn.classList.add('opt-correct');
+        else if (i === myAnswer && myAnswer !== q.correctIndex) btn.classList.add('opt-wrong');
+      }
+
+      btn.onclick = () => sendAnswer(i);
+      container.appendChild(btn);
+    });
+
+    // Badge de reveal
+    if (state.phase === 'reveal' && myAnswer !== null) {
+      const correct = myAnswer === q.correctIndex;
+      document.getElementById('revealBadge').innerHTML =
+        `<div class="reveal-badge ${correct ? 'reveal-correct' : 'reveal-wrong'}">
+          ${correct ? '✅ Correto!' : '❌ Errou…'}
+        </div>`;
+    } else if (state.phase === 'reveal' && myAnswer === null) {
+      document.getElementById('revealBadge').innerHTML =
+        `<div class="reveal-badge reveal-missed">⏱ Não respondeu a tempo</div>`;
+    }
+  }
+  renderQuestion._lastIndex = -1;
+
+  function sendAnswer(optionIndex) {
+    if (myAnswer !== null) return;
+    myAnswer = optionIndex;
+    socket.emit('answer', { optionIndex });
+    document.getElementById('ackMsg').textContent = '✅ Resposta registrada!';
+    document.getElementById('ackMsg').classList.remove('hidden');
+    // Bloqueia botões
+    document.querySelectorAll('.opt-btn').forEach((btn, i) => {
+      btn.disabled = true;
+      if (i === optionIndex) btn.classList.add('opt-selected');
+    });
+  }
+
+  function renderRanking(ranking) {
+    const list = document.getElementById('rankList');
+    list.innerHTML = '';
+    ranking.forEach(item => {
+      const isMe = item.name.toLowerCase() === myName.toLowerCase();
+      const medals = ['🥇','🥈','🥉'];
+      const posStr = item.rank <= 3 ? medals[item.rank - 1] : `${item.rank}º`;
+      const posClass = item.rank <= 3 ? `rank-${item.rank}` : '';
+      list.innerHTML += `
+        <div class="rank-item ${isMe ? 'me' : ''}">
+          <div class="rank-pos ${posClass}">${posStr}</div>
+          <div class="rank-name">${item.name}${isMe ? ' 👈' : ''}</div>
+          <div class="rank-score">
+            <div class="rank-pts">${item.score} pts</div>
+            <div>${(item.totalMs / 1000).toFixed(1)}s</div>
+          </div>
+        </div>`;
+    });
+  }
+</script>
+</body>
+</html>

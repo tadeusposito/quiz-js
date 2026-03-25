@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin – Jovem Senador Quiz</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --azul: #1a3d6b; --azul-claro: #1e5dbf; --dourado: #c8a84b;
+    --bg: #0d1a12; --card: #0e1828; --border: #1a3058; --text: #f0f0f0;
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  /* AUTH */
+  #auth-screen {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    z-index: 100;
+  }
+  #auth-screen h2 { color: var(--dourado); font-size: 22px; }
+  #auth-screen input {
+    padding: 12px 20px; font-size: 18px; border-radius: 10px;
+    border: 2px solid var(--azul); background: var(--card); color: #fff;
+    text-align: center; letter-spacing: 6px; outline: none;
+  }
+  #auth-screen button { padding: 12px 36px; font-size: 15px; font-weight: 700; border-radius: 10px; background: var(--azul-claro); color: #fff; border: none; cursor: pointer; }
+  #auth-error { color: #f44336; font-size: 14px; }
+
+  /* LAYOUT */
+  .page { max-width: 900px; margin: 0 auto; padding: 30px 20px; }
+  h1 { font-size: 24px; color: var(--dourado); margin-bottom: 6px; }
+  .subtitle { font-size: 14px; color: #5a82b8; margin-bottom: 30px; }
+
+  /* CARD */
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 24px; margin-bottom: 24px;
+  }
+  .card h2 { font-size: 16px; color: var(--dourado); margin-bottom: 18px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+
+  label { display: block; font-size: 13px; color: #7a9cc8; margin-bottom: 6px; font-weight: 600; }
+  input[type=text], textarea, select {
+    width: 100%; padding: 11px 14px; font-size: 15px; border-radius: 9px;
+    border: 1px solid var(--border); background: #090f1e; color: #fff; outline: none;
+    transition: border-color .2s; margin-bottom: 16px;
+  }
+  input[type=text]:focus, textarea:focus { border-color: var(--azul-claro); }
+  textarea { resize: vertical; min-height: 80px; }
+
+  .file-upload {
+    border: 2px dashed var(--border); border-radius: 10px; padding: 20px;
+    text-align: center; cursor: pointer; transition: border-color .2s; margin-bottom: 16px;
+    color: #5a82b8; font-size: 14px;
+  }
+  .file-upload:hover, .file-upload.drag { border-color: var(--azul-claro); color: #fff; }
+  .file-upload input { display: none; }
+
+  /* OPTIONS BUILDER */
+  .options-builder { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .option-row { display: flex; gap: 8px; align-items: center; }
+  .option-row input { margin-bottom: 0; flex: 1; }
+  .option-row .radio-correct { width: 24px; height: 24px; accent-color: #4caf50; cursor: pointer; flex-shrink: 0; }
+  .option-row .remove-opt { background: #3a1a1a; border: none; color: #f44336; border-radius: 6px; width: 30px; height: 30px; cursor: pointer; font-size: 16px; flex-shrink: 0; }
+  .add-opt-btn {
+    background: none; border: 1px dashed var(--border); border-radius: 8px;
+    color: #5a82b8; padding: 8px; cursor: pointer; font-size: 13px; transition: all .15s;
+  }
+  .add-opt-btn:hover { border-color: var(--azul-claro); color: #fff; }
+
+  .correct-hint { font-size: 12px; color: #5a82b8; margin-bottom: 12px; }
+
+  /* BUTTONS */
+  .btn { padding: 11px 22px; font-size: 14px; font-weight: 700; border-radius: 9px; border: none; cursor: pointer; transition: all .15s; }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--azul-claro); color: #fff; }
+  .btn-primary:hover { background: #2a72d4; }
+  .btn-primary:disabled { background: #162848; color: #3a62a0; cursor: not-allowed; }
+  .btn-danger { background: #3a1a1a; color: #f44336; }
+  .btn-danger:hover { background: #4a1a1a; }
+  .btn-gold { background: var(--dourado); color: #000; font-weight: 800; }
+
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  /* QUESTION LIST */
+  .q-list { display: flex; flex-direction: column; gap: 10px; }
+  .q-item {
+    background: #090f1e; border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; display: flex; gap: 14px; align-items: flex-start;
+  }
+  .q-num { font-size: 22px; font-weight: 800; color: var(--dourado); width: 32px; text-align: center; flex-shrink: 0; padding-top: 2px; }
+  .q-info { flex: 1; }
+  .q-prompt { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .q-opts { font-size: 13px; color: #5a82b8; }
+  .q-opts .correct { color: #4caf50; font-weight: 700; }
+  .q-media-tag { font-size: 11px; background: #162848; border-radius: 4px; padding: 2px 7px; color: #7a9cc8; display: inline-block; margin-left: 8px; }
+  .q-actions { display: flex; flex-direction: column; gap: 6px; }
+  .q-actions button { padding: 6px 12px; font-size: 12px; border-radius: 6px; border: none; cursor: pointer; }
+  .btn-del { background: #3a1a1a; color: #f44336; }
+  .btn-up, .btn-dn { background: #101e35; color: #7a9cc8; }
+
+  /* PREVIEW */
+  .media-preview { margin-bottom: 14px; }
+  .media-preview img, .media-preview video { max-width: 100%; border-radius: 8px; max-height: 180px; }
+
+  /* STATUS */
+  .status-msg { padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-top: 10px; }
+  .status-ok { background: #1a4a1a; color: #4caf50; }
+  .status-err { background: #4a1a1a; color: #f44336; }
+
+  /* TEMPLATES */
+  .templates { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tpl-btn {
+    padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--card); color: #7a9cc8; cursor: pointer; font-size: 13px;
+    transition: all .15s;
+  }
+  .tpl-btn:hover { border-color: var(--azul-claro); color: #fff; }
+
+  .empty-state { text-align: center; color: #3a62a0; padding: 30px; font-size: 15px; }
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="auth-screen">
+  <h2>🔒 Admin – Jovem Senador Quiz</h2>
+  <input type="password" id="pinIn" placeholder="PIN Admin" maxlength="8" />
+  <button onclick="doAuth()">Entrar</button>
+  <div id="auth-error"></div>
+</div>
+
+<div class="page" id="main-page" style="display:none">
+  <h1>🏛 Jovem Senador – Gerenciador de Quiz</h1>
+  <p class="subtitle">Cadastre as questões abaixo. Após subir todas, acesse <strong>/presenter</strong> no telão.</p>
+
+  <!-- ADD QUESTION -->
+  <div class="card">
+    <h2>➕ Nova Questão</h2>
+
+    <label>Mídia (imagem ou vídeo) — opcional</label>
+    <div class="file-upload" id="dropZone" onclick="document.getElementById('mediaFile').click()">
+      <input type="file" id="mediaFile" accept="image/*,video/*" onchange="handleFile(this)">
+      <span id="dropLabel">📎 Clique ou arraste uma imagem/vídeo aqui</span>
+    </div>
+    <div class="media-preview" id="mediaPreview"></div>
+
+    <label>Texto da questão (o que aparece no celular e no telão)</label>
+    <textarea id="qPrompt" placeholder="Ex: Este vídeo foi gerado por inteligência artificial?" rows="3"></textarea>
+
+    <label>Alternativas <span class="correct-hint">(marque ✅ a correta)</span></label>
+    <div class="templates">
+      <button class="tpl-btn" onclick="loadTemplate(['Fato','Fake'], 0)">Fato / Fake</button>
+      <button class="tpl-btn" onclick="loadTemplate(['IA','Real'], 0)">IA / Real</button>
+      <button class="tpl-btn" onclick="loadTemplate(['Verdadeiro','Falso'], 0)">Verdadeiro / Falso</button>
+      <button class="tpl-btn" onclick="loadTemplate(['A','B','C','D'], 0)">A/B/C/D</button>
+    </div>
+    <div class="options-builder" id="optionsBuilder"></div>
+    <button class="add-opt-btn" onclick="addOption('')">+ Adicionar alternativa</button>
+
+    <div style="margin-top: 18px;">
+      <button class="btn btn-primary" id="addBtn" onclick="addQuestion()">💾 Salvar Questão</button>
+    </div>
+    <div id="addStatus"></div>
+  </div>
+
+  <!-- QUESTION LIST -->
+  <div class="card">
+    <h2>📋 Questões Cadastradas</h2>
+    <div class="q-list" id="questionList">
+      <div class="empty-state">Nenhuma questão cadastrada ainda.</div>
+    </div>
+    <div style="margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap;">
+      <button class="btn btn-gold" onclick="openPresenter()">🖥 Abrir Telão (/presenter)</button>
+      <button class="btn btn-danger" onclick="if(confirm('Resetar TODAS as respostas e pontuações?')) resetScores()">↺ Resetar Pontuações</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let adminPin = '';
+  let questions = [];
+  let optionCount = 0;
+  let correctIndex = 0;
+  let selectedFile = null;
+
+  function doAuth() {
+    adminPin = document.getElementById('pinIn').value;
+    fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: adminPin, role: 'admin' })
+    }).then(r => r.json()).then(d => {
+      if (d.ok) {
+        document.getElementById('auth-screen').style.display = 'none';
+        document.getElementById('main-page').style.display = 'block';
+        loadTemplate(['Fato', 'Fake'], 0);
+        loadQuestions();
+      } else {
+        document.getElementById('auth-error').textContent = 'PIN incorreto.';
+      }
+    });
+  }
+  document.getElementById('pinIn').addEventListener('keydown', e => { if (e.key === 'Enter') doAuth(); });
+
+  // ── Opções ─────────────────────────────────────────────────────────────────
+  function loadTemplate(labels, correct) {
+    document.getElementById('optionsBuilder').innerHTML = '';
+    optionCount = 0;
+    correctIndex = correct;
+    labels.forEach((l, i) => addOption(l, i === correct));
+  }
+
+  function addOption(value = '', isCorrect = false) {
+    const builder = document.getElementById('optionsBuilder');
+    const idx = optionCount++;
+    const row = document.createElement('div');
+    row.className = 'option-row';
+    row.dataset.idx = idx;
+    row.innerHTML = `
+      <input type="radio" name="correct" class="radio-correct" value="${idx}" ${isCorrect ? 'checked' : ''} onchange="correctIndex=parseInt(this.value)" title="Marcar como correta">
+      <input type="text" placeholder="Alternativa ${idx + 1}" value="${value}" style="margin-bottom:0">
+      <button class="remove-opt" onclick="this.parentElement.remove()" title="Remover">✕</button>`;
+    builder.appendChild(row);
+    if (isCorrect) correctIndex = idx;
+  }
+
+  function getOptions() {
+    const rows = document.querySelectorAll('.option-row');
+    return Array.from(rows).map(r => r.querySelector('input[type=text]').value.trim()).filter(Boolean);
+  }
+
+  function getCorrectIndex() {
+    const checked = document.querySelector('input[name=correct]:checked');
+    if (!checked) return 0;
+    const idx = parseInt(checked.value);
+    // Mapa: índice do radio → posição real na lista filtrada
+    const rows = Array.from(document.querySelectorAll('.option-row'));
+    const checkedRow = rows.findIndex(r => r.dataset.idx == checked.value);
+    return checkedRow >= 0 ? checkedRow : 0;
+  }
+
+  // ── Arquivo ────────────────────────────────────────────────────────────────
+  function handleFile(input) {
+    selectedFile = input.files[0];
+    if (!selectedFile) return;
+    document.getElementById('dropLabel').textContent = `📎 ${selectedFile.name}`;
+    const preview = document.getElementById('mediaPreview');
+    const url = URL.createObjectURL(selectedFile);
+    if (selectedFile.type.startsWith('video')) {
+      preview.innerHTML = `<video src="${url}" controls style="max-width:100%;max-height:180px;border-radius:8px;"></video>`;
+    } else {
+      preview.innerHTML = `<img src="${url}" style="max-width:100%;max-height:180px;border-radius:8px;">`;
+    }
+  }
+
+  // Drag & drop
+  const dz = document.getElementById('dropZone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('drag');
+    const f = e.dataTransfer.files[0];
+    if (f) { document.getElementById('mediaFile').files = e.dataTransfer.files; handleFile({ files: [f] }); }
+  });
+
+  // ── Salvar questão ─────────────────────────────────────────────────────────
+  async function addQuestion() {
+    const prompt = document.getElementById('qPrompt').value.trim();
+    const options = getOptions();
+    const cidx = getCorrectIndex();
+
+    if (!prompt) return showStatus('addStatus', 'Digite o texto da questão.', false);
+    if (options.length < 2) return showStatus('addStatus', 'Adicione pelo menos 2 alternativas.', false);
+    if (cidx >= options.length) return showStatus('addStatus', 'Selecione a alternativa correta.', false);
+
+    const btn = document.getElementById('addBtn');
+    btn.disabled = true; btn.textContent = 'Salvando…';
+
+    const fd = new FormData();
+    fd.append('pin', adminPin);
+    fd.append('prompt', prompt);
+    fd.append('options', JSON.stringify(options));
+    fd.append('correctIndex', cidx);
+    if (selectedFile) fd.append('media', selectedFile);
+
+    try {
+      const r = await fetch('/api/questions', { method: 'POST', body: fd });
+      const d = await r.json();
+      if (d.ok) {
+        showStatus('addStatus', '✅ Questão salva!', true);
+        document.getElementById('qPrompt').value = '';
+        document.getElementById('mediaPreview').innerHTML = '';
+        document.getElementById('dropLabel').textContent = '📎 Clique ou arraste uma imagem/vídeo aqui';
+        selectedFile = null;
+        document.getElementById('mediaFile').value = '';
+        loadTemplate(['Fato', 'Fake'], 0);
+        loadQuestions();
+      } else {
+        showStatus('addStatus', 'Erro ao salvar.', false);
+      }
+    } catch (e) {
+      showStatus('addStatus', 'Erro de rede.', false);
+    }
+    btn.disabled = false; btn.textContent = '💾 Salvar Questão';
+  }
+
+  // ── Carregar questões ──────────────────────────────────────────────────────
+  async function loadQuestions() {
+    const r = await fetch(`/api/questions?pin=${adminPin}`);
+    const data = await r.json();
+    questions = data;
+    renderList();
+  }
+
+  function renderList() {
+    const list = document.getElementById('questionList');
+    if (questions.length === 0) {
+      list.innerHTML = '<div class="empty-state">Nenhuma questão cadastrada ainda.</div>';
+      return;
+    }
+    list.innerHTML = questions.map((q, i) => {
+      const opts = q.options.map(o =>
+        `<span class="${o.correct ? 'correct' : ''}">${o.label}${o.correct ? ' ✅' : ''}</span>`
+      ).join(' · ');
+      const mediaTag = q.mediaType ? `<span class="q-media-tag">${q.mediaType === 'video' ? '🎬' : '🖼'} ${q.mediaType}</span>` : '';
+      return `
+        <div class="q-item">
+          <div class="q-num">${i + 1}</div>
+          <div class="q-info">
+            <div class="q-prompt">${q.prompt}${mediaTag}</div>
+            <div class="q-opts">${opts}</div>
+          </div>
+          <div class="q-actions">
+            <button class="btn-up" onclick="moveQ(${i}, -1)" ${i === 0 ? 'disabled' : ''}>▲</button>
+            <button class="btn-dn" onclick="moveQ(${i}, 1)" ${i === questions.length - 1 ? 'disabled' : ''}>▼</button>
+            <button class="btn-del" onclick="deleteQ('${q.id}')">🗑</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  async function deleteQ(id) {
+    if (!confirm('Deletar esta questão?')) return;
+    await fetch(`/api/questions/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: adminPin })
+    });
+    loadQuestions();
+  }
+
+  async function moveQ(idx, dir) {
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= questions.length) return;
+    [questions[idx], questions[newIdx]] = [questions[newIdx], questions[idx]];
+    renderList();
+    await fetch('/api/questions/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: adminPin, ids: questions.map(q => q.id) })
+    });
+  }
+
+  async function resetScores() {
+    await fetch('/api/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: adminPin })
+    });
+    alert('Pontuações resetadas!');
+  }
+
+  function openPresenter() {
+    window.open('/presenter', '_blank');
+  }
+
+  function showStatus(id, msg, ok) {
+    const el = document.getElementById(id);
+    el.innerHTML = `<div class="status-msg ${ok ? 'status-ok' : 'status-err'}">${msg}</div>`;
+    if (ok) setTimeout(() => el.innerHTML = '', 3000);
+  }
+</script>
+</body>
+</html>
