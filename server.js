@@ -37,6 +37,10 @@ const state = {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ── Rotas amigáveis ───────────────────────────────────────────────────────────
+app.get('/presenter', (req, res) => res.sendFile(path.join(__dirname, 'public', 'presenter.html')));
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+
 // ── Admin API ─────────────────────────────────────────────────────────────────
 
 // Verificar PIN
