@@ -13,9 +13,39 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_PIN = process.env.ADMIN_PIN || '1234';
 const PRESENTER_PIN = process.env.PRESENTER_PIN || '5678';
 
+// ── Diretório de dados persistentes ──────────────────────────────────────────
+// Se existir um Volume no Railway montado em /data, usa ele. Senão, usa local.
+const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, 'data');
+const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+const QUESTIONS_FILE = path.join(DATA_DIR, 'questions.json');
+
+// Garante que os diretórios existem
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+// ── Carregar questões salvas ──────────────────────────────────────────────────
+function loadQuestions() {
+  try {
+    if (fs.existsSync(QUESTIONS_FILE)) {
+      const raw = fs.readFileSync(QUESTIONS_FILE, 'utf8');
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.error('Erro ao carregar questions.json:', e.message);
+  }
+  return [];
+}
+
+function saveQuestions(questions) {
+  try {
+    fs.writeFileSync(QUESTIONS_FILE, JSON.stringify(questions, null, 2), 'utf8');
+  } catch (e) {
+    console.error('Erro ao salvar questions.json:', e.message);
+  }
+}
+
 // ── Multer ────────────────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, 'public', 'uploads')),
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
     cb(null, `q_${Date.now()}${ext}`);
@@ -25,17 +55,22 @@ const upload = multer({ storage, limits: { fileSize: 150 * 1024 * 1024 } });
 
 // ── Estado global (em memória) ────────────────────────────────────────────────
 const state = {
-  questions: [],          // { id, mediaType, mediaUrl, prompt, options:[{label,correct}] }
-  phase: 'lobby',         // 'lobby' | 'question' | 'reveal' | 'ranking'
+  questions: loadQuestions(),  // carrega do disco ao iniciar
+  phase: 'lobby',
   currentIndex: -1,
-  participants: {},       // socketId → { name, score, totalMs, answers:[] }
-  answers: {},            // `${socketId}_${qIndex}` → { optionIndex, ms, correct }
+  participants: {},
+  answers: {},
   questionStartedAt: null,
 };
+
+console.log(`Questões carregadas: ${state.questions.length}`);
 
 // ── Static ────────────────────────────────────────────────────────────────────
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve uploads do diretório de dados (pode ser /data/uploads)
+app.use('/uploads', express.static(UPLOADS_DIR));
 
 // ── Rotas amigáveis ───────────────────────────────────────────────────────────
 app.get('/presenter', (req, res) => res.sendFile(path.join(__dirname, 'public', 'presenter.html')));
@@ -66,6 +101,7 @@ app.post('/api/questions', upload.single('media'), (req, res) => {
     options: parsedOptions.map((label, i) => ({ label, correct: i === parsedCorrect })),
   };
   state.questions.push(q);
+  saveQuestions(state.questions);
   res.json({ ok: true, question: q });
 });
 
@@ -82,9 +118,10 @@ app.delete('/api/questions/:id', (req, res) => {
   if (idx === -1) return res.status(404).json({ error: 'Não encontrado' });
   const [removed] = state.questions.splice(idx, 1);
   if (removed.mediaUrl) {
-    const filePath = path.join(__dirname, 'public', removed.mediaUrl);
+    const filePath = path.join(UPLOADS_DIR, path.basename(removed.mediaUrl));
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   }
+  saveQuestions(state.questions);
   res.json({ ok: true });
 });
 
@@ -93,6 +130,7 @@ app.post('/api/questions/reorder', (req, res) => {
   if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
   const { ids } = req.body;
   state.questions = ids.map(id => state.questions.find(q => q.id === id)).filter(Boolean);
+  saveQuestions(state.questions);
   res.json({ ok: true });
 });
 
