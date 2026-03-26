@@ -585,6 +585,10 @@
     hint.className = 'expand-hint';
     hint.textContent = '⛶';
 
+    // Limpa handlers anteriores antes de definir novos
+    wrapper.onclick = null;
+    wrapper.ondblclick = null;
+
     if (type === 'video') {
       const video = document.createElement('video');
       video.src = url;
@@ -595,10 +599,12 @@
       overlay.className = 'video-overlay';
       overlay.id = 'videoOverlay';
       overlay.innerHTML = '<div class="play-icon">▶</div>';
-      overlay.onclick = toggleVideo;
+      // stopPropagation garante que o clique no overlay não suba pro wrapper
+      overlay.onclick = e => { e.stopPropagation(); toggleVideo(); };
       wrapper.appendChild(video);
       wrapper.appendChild(overlay);
       wrapper.appendChild(hint);
+      // Duplo clique em qualquer parte → lightbox
       wrapper.ondblclick = e => { e.stopPropagation(); openLightbox(url, 'video'); };
       video.addEventListener('ended', () => {
         overlay.classList.remove('playing');
@@ -612,6 +618,7 @@
       img.style.cssText = 'width:100%;max-height:62vh;object-fit:contain;display:block;';
       wrapper.appendChild(img);
       wrapper.appendChild(hint);
+      // Clique simples → lightbox
       wrapper.onclick = () => openLightbox(url, 'image');
       btnPlay.style.display = 'none';
     }
