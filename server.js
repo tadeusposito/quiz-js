@@ -210,7 +210,7 @@ io.on('connection', (socket) => {
     socket._playerId = playerId;
 
     socket.emit('joined', buildPublicState());
-    io.to('presenter').emit('presenterExtra', buildPresenterExtra());
+    io.to('presenter').emit('presenterState', { ...buildPublicState(), ...buildPresenterExtra(), ranking: buildRanking(), questions: state.questions });
   });
 
   // ── Resposta do participante ────────────────────────────────────────────────
