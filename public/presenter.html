@@ -530,6 +530,12 @@
     if (!extra) return;
     document.getElementById('answerCount').textContent = extra.answerTotal || 0;
     document.getElementById('answerTotal').textContent = extra.participantCount || 0;
+    // Atualiza contador do header e do lobby sempre que chegar participantCount
+    if (extra.participantCount !== undefined) {
+      document.getElementById('hdrP').textContent = extra.participantCount;
+      const lobbyCount = document.getElementById('lobbyCount');
+      if (lobbyCount) lobbyCount.textContent = extra.participantCount;
+    }
     // Atualizar cards se visíveis
     if (currentState && (currentState.phase === 'question' || currentState.phase === 'reveal')) {
       currentState = { ...currentState, ...extra };
