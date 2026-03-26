@@ -136,36 +136,55 @@
   /* Media player */
   .media-wrapper {
     position: relative; border-radius: 14px; overflow: hidden;
-    background: #000; border: 2px solid var(--border);
+    background: #000; border: 2px solid #1e3860;
     cursor: zoom-in;
   }
   .media-wrapper img {
-    width: 100%; max-height: 500px; object-fit: contain; display: block;
+    width: 100%; max-height: 62vh; object-fit: contain; display: block;
   }
   .media-wrapper video {
-    width: 100%; max-height: 500px; object-fit: contain; display: block;
+    width: 100%; max-height: 62vh; object-fit: contain; display: block;
   }
-  /* Ícone de fullscreen no canto */
-  .fullscreen-hint {
+  /* Ícone de expandir no canto */
+  .expand-hint {
     position: absolute; top: 10px; right: 10px;
-    background: rgba(0,0,0,0.55); color: #fff;
-    border-radius: 6px; padding: 4px 8px; font-size: 16px;
+    background: rgba(0,0,0,0.6); color: #fff;
+    border-radius: 6px; padding: 5px 9px; font-size: 18px;
     pointer-events: none; opacity: 0; transition: opacity .2s;
   }
-  .media-wrapper:hover .fullscreen-hint { opacity: 1; }
-  /* Quando em fullscreen nativo, remove limitações de tamanho */
-  .media-wrapper:fullscreen,
-  .media-wrapper:-webkit-full-screen {
-    background: #000; border-radius: 0; border: none;
-    display: flex; align-items: center; justify-content: center;
+  .media-wrapper:hover .expand-hint { opacity: 1; }
+
+  /* Lightbox */
+  #lightbox {
+    display: none; position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0,0,0,0.95);
+    align-items: center; justify-content: center;
     cursor: zoom-out;
   }
-  .media-wrapper:fullscreen img,
-  .media-wrapper:-webkit-full-screen img,
-  .media-wrapper:fullscreen video,
-  .media-wrapper:-webkit-full-screen video {
-    max-height: 100vh; max-width: 100vw; width: auto; height: auto;
+  #lightbox.open { display: flex; }
+  #lightbox-media {
+    max-width: 96vw; max-height: 94vh;
+    object-fit: contain; border-radius: 6px;
+    box-shadow: 0 0 60px rgba(0,0,0,0.8);
+    cursor: default;
   }
+  #lightbox-close {
+    position: fixed; top: 16px; right: 20px;
+    color: #fff; font-size: 32px; font-weight: 700;
+    cursor: pointer; z-index: 10000;
+    background: rgba(255,255,255,0.15); border-radius: 50%;
+    width: 48px; height: 48px; display: flex;
+    align-items: center; justify-content: center;
+    user-select: none; line-height: 1;
+  }
+  #lightbox-close:hover { background: rgba(255,255,255,0.3); }
+
+  /* Opções menores quando há mídia */
+  .has-media .opt-card {
+    padding: 12px 14px;
+    font-size: clamp(13px, 1.4vw, 20px);
+  }
+  .has-media .opt-card .opt-count { font-size: 12px; }
   .video-overlay {
     position: absolute; inset: 0;
     display: flex; align-items: center; justify-content: center;
@@ -333,7 +352,7 @@
 
 <!-- Lightbox -->
 <div id="lightbox" onclick="closeLightbox()">
-  <div id="lightbox-close" onclick="closeLightbox()">✕</div>
+  <div id="lightbox-close" onclick="event.stopPropagation(); closeLightbox()">✕</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
@@ -355,6 +374,8 @@
 
   socket.on('presenterState', (state) => {
     document.getElementById('pin-screen').style.display = 'none';
+    // Pré-carrega todas as mídias na primeira vez que recebe as questions
+    if (!currentState && state.questions) preloadAllMedia(state.questions);
     // Nova questão → força rebuild da mídia
     if (!currentState || currentState.currentIndex !== state.currentIndex) _lastMediaUrl = null;
     currentState = state;
@@ -448,43 +469,64 @@
 
   let _lastMediaUrl = null; // evita recriar o elemento de vídeo a cada update de respostas
 
+  // ── Lightbox ──────────────────────────────────────────────────────────────
   function openLightbox(url, type) {
     const lb = document.getElementById('lightbox');
-    lb.innerHTML = '<div id="lightbox-close" onclick="closeLightbox()">✕</div>';
+    // Remove mídia anterior se houver
+    const old = document.getElementById('lightbox-media');
+    if (old) old.remove();
+
+    let el;
     if (type === 'video') {
-      const v = document.createElement('video');
-      v.src = url; v.controls = true; v.autoplay = true; v.playsInline = true;
-      v.style.cssText = 'max-width:96vw;max-height:94vh;object-fit:contain;border-radius:6px;';
-      v.onclick = e => e.stopPropagation();
-      lb.appendChild(v);
+      el = document.createElement('video');
+      el.src = url; el.controls = true; el.autoplay = true; el.playsInline = true;
     } else {
-      const img = document.createElement('img');
-      img.src = url;
-      img.style.cssText = 'max-width:96vw;max-height:94vh;object-fit:contain;border-radius:6px;';
-      img.onclick = e => e.stopPropagation();
-      lb.appendChild(img);
+      el = document.createElement('img');
+      el.src = url;
     }
+    el.id = 'lightbox-media';
+    el.onclick = e => e.stopPropagation();
+    lb.appendChild(el);
     lb.classList.add('open');
   }
 
   function closeLightbox() {
     const lb = document.getElementById('lightbox');
     lb.classList.remove('open');
-    // Pausa vídeo se houver
     const v = lb.querySelector('video');
-    if (v) v.pause();
+    if (v) { v.pause(); v.remove(); }
+    const img = lb.querySelector('img');
+    if (img) img.remove();
   }
-
-  // Fechar com ESC
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
 
+  // ── Pré-carregamento de todas as mídias ───────────────────────────────────
+  function preloadAllMedia(questions) {
+    if (!questions) return;
+    questions.forEach(q => {
+      [q.mediaUrl, q.revealMediaUrl].forEach(url => {
+        if (!url) return;
+        const ext = url.split('.').pop().toLowerCase();
+        const isVideo = ['mp4','webm','mov','ogg'].includes(ext);
+        if (isVideo) {
+          const v = document.createElement('video');
+          v.src = url; v.preload = 'auto'; v.style.display = 'none';
+          document.body.appendChild(v);
+        } else {
+          const img = new Image();
+          img.src = url;
+        }
+      });
+    });
+  }
+
+  // ── buildMediaElement ─────────────────────────────────────────────────────
   function buildMediaElement(url, type, btnPlay) {
     const wrapper = document.getElementById('mediaWrapper');
     wrapper.innerHTML = '';
 
-    // Ícone de expandir
     const hint = document.createElement('div');
-    hint.className = 'fullscreen-hint';
+    hint.className = 'expand-hint';
     hint.textContent = '⛶';
 
     if (type === 'video') {
@@ -492,7 +534,7 @@
       video.src = url;
       video.preload = 'auto';
       video.playsInline = true;
-      video.style.cssText = 'width:100%;max-height:500px;object-fit:contain;display:block;';
+      video.style.cssText = 'width:100%;max-height:62vh;object-fit:contain;display:block;';
       const overlay = document.createElement('div');
       overlay.className = 'video-overlay';
       overlay.id = 'videoOverlay';
@@ -501,8 +543,7 @@
       wrapper.appendChild(video);
       wrapper.appendChild(overlay);
       wrapper.appendChild(hint);
-      // Duplo clique → lightbox
-      wrapper.ondblclick = (e) => { e.stopPropagation(); openLightbox(url, 'video'); };
+      wrapper.ondblclick = e => { e.stopPropagation(); openLightbox(url, 'video'); };
       video.addEventListener('ended', () => {
         overlay.classList.remove('playing');
         btnPlay.textContent = '▶ Play Vídeo';
@@ -512,10 +553,9 @@
     } else {
       const img = document.createElement('img');
       img.src = url;
-      img.style.cssText = 'width:100%;max-height:500px;object-fit:contain;display:block;';
+      img.style.cssText = 'width:100%;max-height:62vh;object-fit:contain;display:block;';
       wrapper.appendChild(img);
       wrapper.appendChild(hint);
-      // Clique simples → lightbox
       wrapper.onclick = () => openLightbox(url, 'image');
       btnPlay.style.display = 'none';
     }
