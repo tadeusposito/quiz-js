@@ -255,6 +255,25 @@
   }
   .answers-live strong { color: #fff; font-size: 22px; display: block; }
 
+  /* SELEÇÃO DE QUIZ */
+  #select-quiz-view { text-align: center; }
+  .quiz-select-title { font-size: 28px; font-weight: 800; color: var(--dourado); margin-bottom: 10px; }
+  .quiz-select-sub { font-size: 16px; color: #7a9cc8; margin-bottom: 36px; }
+  .quiz-select-btns { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
+  .quiz-btn {
+    padding: 32px 48px; border-radius: 20px; font-size: 28px; font-weight: 900;
+    border: 3px solid transparent; cursor: pointer; transition: all .2s;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    min-width: 200px;
+  }
+  .quiz-btn-1 { background: #0c1e38; border-color: var(--azul-claro); color: #fff; }
+  .quiz-btn-1:hover { background: #1a3a6a; transform: scale(1.04); }
+  .quiz-btn-2 { background: #1e1400; border-color: var(--dourado); color: #fff; }
+  .quiz-btn-2:hover { background: #3a2800; transform: scale(1.04); }
+  .quiz-btn-count { font-size: 14px; font-weight: 400; color: #7a9cc8; }
+  .quiz-btn-1 .quiz-btn-count { color: #7a9cc8; }
+  .quiz-btn-2 .quiz-btn-count { color: #c8a84b; }
+
   .hidden { display: none !important; }
 </style>
 </head>
@@ -285,8 +304,24 @@
 <div class="main">
   <div class="content-area">
 
+    <!-- SELEÇÃO DE QUIZ -->
+    <div id="select-quiz-view" class="hidden">
+      <div class="quiz-select-title">🏛 Jovem Senador – Quiz</div>
+      <div class="quiz-select-sub">Selecione qual quiz iniciar</div>
+      <div class="quiz-select-btns">
+        <button class="quiz-btn quiz-btn-1" onclick="selectQuiz(1)">
+          Quiz 1
+          <span class="quiz-btn-count" id="quiz1count">0 questões</span>
+        </button>
+        <button class="quiz-btn quiz-btn-2" onclick="selectQuiz(2)">
+          Quiz 2
+          <span class="quiz-btn-count" id="quiz2count">0 questões</span>
+        </button>
+      </div>
+    </div>
+
     <!-- LOBBY -->
-    <div id="lobby-view">
+    <div id="lobby-view" class="hidden">
       <div class="qr-container">
         <canvas id="qr-code"></canvas>
       </div>
@@ -332,7 +367,8 @@
     <button class="ctrl-btn" id="btnNext" onclick="cmd('next')" style="background:var(--azul-claro);color:#fff;">▶ Próxima Questão</button>
     <button class="ctrl-btn" id="btnReveal" onclick="cmd('reveal')" disabled style="background:#c8a84b;color:#000;margin-top:8px;">👁 Revelar Resposta</button>
     <button class="ctrl-btn" id="btnPlayPause" onclick="toggleVideo()" style="background:#1a3a60;color:#7ab0ff;margin-top:8px;display:none;">▶ Play Vídeo</button>
-    <button class="ctrl-btn" onclick="if(confirm('Resetar quiz?')) cmd('lobby')" style="background:#3a1a1a;color:#f44336;margin-top:8px;">↺ Resetar</button>
+    <button class="ctrl-btn" id="btnBackSelect" onclick="cmd('backToSelect')" style="background:#1a2a40;color:#7a9cc8;margin-top:8px;">← Trocar Quiz</button>
+    <button class="ctrl-btn" onclick="if(confirm('Resetar tudo e expulsar participantes?')) cmd('lobby')" style="background:#3a1a1a;color:#f44336;margin-top:8px;">↺ Reset Total</button>
     </div>
 
     <div style="margin-top: 20px;">
@@ -399,30 +435,48 @@
     socket.emit('cmd', { pin: presenterPin, action });
   }
 
+  function selectQuiz(quizId) {
+    socket.emit('cmd', { pin: presenterPin, action: 'selectQuiz', quizId });
+  }
+
   function applyState(state) {
     // Header
     document.getElementById('hdrP').textContent = state.participantCount || 0;
     document.getElementById('hdrQ').textContent = state.currentIndex >= 0 ? `${state.currentIndex + 1}/${state.totalQuestions}` : '–';
-    const phaseNames = { lobby: 'Lobby', question: 'Respondendo', reveal: 'Revelando', ranking: 'Ranking' };
-    document.getElementById('hdrPhase').textContent = phaseNames[state.phase] || state.phase;
-    document.getElementById('phaseLabel').textContent = phaseNames[state.phase] || state.phase;
+    const phaseNames = { selectQuiz: 'Seleção', lobby: 'Lobby', question: 'Respondendo', reveal: 'Revelando', ranking: 'Ranking', finished: 'Encerrado' };
+    const quizLabel = state.activeQuiz ? ` · Quiz ${state.activeQuiz}` : '';
+    document.getElementById('hdrPhase').textContent = (phaseNames[state.phase] || state.phase) + quizLabel;
+    document.getElementById('phaseLabel').textContent = (phaseNames[state.phase] || state.phase) + quizLabel;
+
+    // Atualiza contagem de questões por quiz na tela de seleção
+    if (state.questions) {
+      const c1 = state.questions.filter(q => (q.quizId || 1) === 1).length;
+      const c2 = state.questions.filter(q => (q.quizId || 1) === 2).length;
+      const el1 = document.getElementById('quiz1count');
+      const el2 = document.getElementById('quiz2count');
+      if (el1) el1.textContent = `${c1} questão${c1 !== 1 ? 'ões' : ''}`;
+      if (el2) el2.textContent = `${c2} questão${c2 !== 1 ? 'ões' : ''}`;
+    }
 
     // Botões
+    const isSelectQuiz = state.phase === 'selectQuiz';
     const isQuestion = state.phase === 'question';
     const isFinished = state.phase === 'finished';
     const isRanking = state.phase === 'ranking';
     document.getElementById('btnReveal').disabled = !isQuestion;
+    document.getElementById('btnBackSelect').style.display = isSelectQuiz ? 'none' : 'block';
     const btnNext = document.getElementById('btnNext');
+    btnNext.style.display = isSelectQuiz ? 'none' : 'block';
     if (isFinished) {
       btnNext.textContent = '🏆 Revelar Ranking';
       btnNext.onclick = () => cmd('ranking');
       btnNext.style.background = '#c8a84b';
       btnNext.style.color = '#000';
     } else if (isRanking) {
-      btnNext.textContent = '↺ Novo Quiz';
-      btnNext.onclick = () => { if(confirm('Iniciar novo quiz?')) cmd('lobby'); };
-      btnNext.style.background = '#1e5dbf';
-      btnNext.style.color = '#fff';
+      btnNext.textContent = '← Trocar Quiz';
+      btnNext.onclick = () => cmd('backToSelect');
+      btnNext.style.background = '#1a2a40';
+      btnNext.style.color = '#7a9cc8';
     } else {
       btnNext.textContent = '▶ Próxima Questão';
       btnNext.onclick = () => cmd('next');
@@ -454,16 +508,18 @@
   }
 
   function showView(phase) {
+    document.getElementById('select-quiz-view').classList.toggle('hidden', phase !== 'selectQuiz');
     document.getElementById('lobby-view').classList.toggle('hidden', phase !== 'lobby' && phase !== 'finished');
-    document.getElementById('question-view').classList.toggle('hidden', phase === 'lobby' || phase === 'ranking' || phase === 'finished');
+    document.getElementById('question-view').classList.toggle('hidden', phase === 'selectQuiz' || phase === 'lobby' || phase === 'ranking' || phase === 'finished');
     document.getElementById('ranking-view').classList.toggle('hidden', phase !== 'ranking');
 
-    // Ajusta texto do lobby quando é 'finished'
     const lobbyParticipants = document.querySelector('.lobby-participants');
-    if (phase === 'finished') {
-      lobbyParticipants.innerHTML = '⏳ Clique em <strong style="color:var(--dourado)">🏆 Revelar Ranking</strong> quando quiser';
-    } else if (phase === 'lobby') {
-      lobbyParticipants.innerHTML = `Participantes prontos: <strong id="lobbyCount">0</strong>`;
+    if (lobbyParticipants) {
+      if (phase === 'finished') {
+        lobbyParticipants.innerHTML = '⏳ Clique em <strong style="color:var(--dourado)">🏆 Revelar Ranking</strong> quando quiser';
+      } else if (phase === 'lobby') {
+        lobbyParticipants.innerHTML = `Participantes prontos: <strong id="lobbyCount">0</strong>`;
+      }
     }
   }
 

@@ -118,6 +118,18 @@
   .tpl-btn:hover { border-color: var(--azul-claro); color: #fff; }
 
   .empty-state { text-align: center; color: #3a62a0; padding: 30px; font-size: 15px; }
+
+  /* Badge de quiz */
+  .quiz-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;
+    cursor: pointer; border: 2px solid transparent; transition: all .15s;
+    user-select: none;
+  }
+  .quiz-badge-1 { background: #0c1e38; color: #7ab0ff; border-color: #1e5dbf; }
+  .quiz-badge-1:hover { background: #1a3a6a; }
+  .quiz-badge-2 { background: #1e1400; color: #c8a84b; border-color: #c8a84b; }
+  .quiz-badge-2:hover { background: #3a2800; }
 </style>
 </head>
 <body>
@@ -155,6 +167,12 @@
     <label>Texto da questão (o que aparece no celular e no telão)</label>
     <textarea id="qPrompt" placeholder="Ex: Este vídeo foi gerado por inteligência artificial?" rows="3"></textarea>
 
+    <label>Quiz</label>
+    <div style="display:flex;gap:10px;margin-bottom:16px;">
+      <button type="button" class="quiz-badge quiz-badge-1" id="formQuiz1" onclick="setFormQuiz(1)" style="border-width:3px;">📘 Quiz 1</button>
+      <button type="button" class="quiz-badge quiz-badge-2" id="formQuiz2" onclick="setFormQuiz(2)">📙 Quiz 2</button>
+    </div>
+
     <label>Alternativas <span class="correct-hint">(marque ✅ a correta)</span></label>
     <div class="templates">
       <button class="tpl-btn" onclick="loadTemplate(['Fato','Fake'], 0)">Fato / Fake</button>
@@ -191,6 +209,13 @@
   let correctIndex = 0;
   let selectedFile = null;
   let selectedRevealFile = null;
+  let currentQuizId = 1;
+
+  function setFormQuiz(id) {
+    currentQuizId = id;
+    document.getElementById('formQuiz1').style.borderWidth = id === 1 ? '3px' : '2px';
+    document.getElementById('formQuiz2').style.borderWidth = id === 2 ? '3px' : '2px';
+  }
 
   function doAuth() {
     adminPin = document.getElementById('pinIn').value;
@@ -306,6 +331,7 @@
     fd.append('prompt', prompt);
     fd.append('options', JSON.stringify(options));
     fd.append('correctIndex', cidx);
+    fd.append('quizId', currentQuizId || 1);
     if (selectedFile) fd.append('media', selectedFile);
     if (selectedRevealFile) fd.append('revealMedia', selectedRevealFile);
 
@@ -342,13 +368,29 @@
     renderList();
   }
 
+  async function toggleQuiz(id, currentQuizId) {
+    const newQuizId = currentQuizId === 1 ? 2 : 1;
+    await fetch(`/api/questions/${id}/quiz`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: adminPin, quizId: newQuizId })
+    });
+    loadQuestions();
+  }
+
   function renderList() {
     const list = document.getElementById('questionList');
     if (questions.length === 0) {
       list.innerHTML = '<div class="empty-state">Nenhuma questão cadastrada ainda.</div>';
       return;
     }
-    list.innerHTML = questions.map((q, i) => {
+    const q1 = questions.filter(q => (q.quizId || 1) === 1).length;
+    const q2 = questions.filter(q => (q.quizId || 1) === 2).length;
+    list.innerHTML = `<div style="margin-bottom:12px;font-size:13px;color:#5a82b8;">
+      📘 Quiz 1: <strong style="color:#fff">${q1}</strong> questão${q1!==1?'ões':''} &nbsp;|&nbsp;
+      📙 Quiz 2: <strong style="color:#fff">${q2}</strong> questão${q2!==1?'ões':''}
+    </div>` + questions.map((q, i) => {
+      const qid = q.quizId || 1;
       const opts = q.options.map(o =>
         `<span class="${o.correct ? 'correct' : ''}">${o.label}${o.correct ? ' ✅' : ''}</span>`
       ).join(' · ');
@@ -361,6 +403,9 @@
             <div class="q-opts">${opts}</div>
           </div>
           <div class="q-actions">
+            <button class="quiz-badge quiz-badge-${qid}" onclick="toggleQuiz('${q.id}', ${qid})" title="Clique para mover para Quiz ${qid===1?2:1}">
+              �${qid===1?'📘':'📙'} Quiz ${qid}
+            </button>
             <button class="btn-up" onclick="moveQ(${i}, -1)" ${i === 0 ? 'disabled' : ''}>▲</button>
             <button class="btn-dn" onclick="moveQ(${i}, 1)" ${i === questions.length - 1 ? 'disabled' : ''}>▼</button>
             <button class="btn-del" onclick="deleteQ('${q.id}')">🗑</button>

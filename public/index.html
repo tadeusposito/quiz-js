@@ -246,9 +246,18 @@
   function applyState(state) {
     totalQuestions = state.totalQuestions;
 
-    if (state.phase === 'lobby') {
+    if (state.phase === 'selectQuiz' || state.phase === 'lobby') {
       if (myName) {
         document.getElementById('lobbyName').textContent = myName;
+        const subEl = document.querySelector('#screen-lobby p.sub');
+        const waitEl = document.querySelector('#screen-lobby p:last-of-type');
+        if (state.phase === 'selectQuiz') {
+          if (subEl) subEl.textContent = 'Você está dentro! ✅';
+          if (waitEl) waitEl.textContent = 'Aguardando o apresentador selecionar o quiz…';
+        } else {
+          if (subEl) subEl.textContent = state.activeQuiz ? `Quiz ${state.activeQuiz} ✅` : 'Você está dentro! ✅';
+          if (waitEl) waitEl.textContent = 'Aguardando o início do quiz…';
+        }
         show('screen-lobby');
       }
       return;
