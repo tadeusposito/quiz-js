@@ -141,7 +141,8 @@ app.post('/api/reset', (req, res) => {
   state.currentIndex = -1;
   state.answers = {};
   state.questionStartedAt = null;
-  Object.values(state.participants).forEach(p => { p.score = 0; p.totalMs = 0; p.answers = []; });
+  state.participants = {};
+  io.emit('kicked'); // manda todo mundo de volta pra tela de nome
   io.emit('state', buildPublicState());
   res.json({ ok: true });
 });
@@ -288,7 +289,8 @@ io.on('connection', (socket) => {
       state.currentIndex = -1;
       state.answers = {};
       state.questionStartedAt = null;
-      Object.values(state.participants).forEach(p => { p.score = 0; p.totalMs = 0; });
+      state.participants = {};
+      io.emit('kicked'); // manda todo mundo de volta pra tela de nome
       io.emit('state', buildPublicState());
       io.to('presenter').emit('presenterState', { ...buildPublicState(), ...buildPresenterExtra(), ranking: [], questions: state.questions });
     }

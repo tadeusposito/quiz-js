@@ -200,6 +200,16 @@
 
   socket.on('state', applyState);
 
+  socket.on('kicked', () => {
+    myName = '';
+    myAnswer = null;
+    renderQuestion._lastIndex = -1;
+    document.getElementById('nameInput').value = '';
+    document.getElementById('joinBtn').disabled = false;
+    document.getElementById('joinError').textContent = '';
+    show('screen-join');
+  });
+
   function applyState(state) {
     totalQuestions = state.totalQuestions;
 
