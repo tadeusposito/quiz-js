@@ -600,12 +600,18 @@
       overlay.id = 'videoOverlay';
       overlay.innerHTML = '<div class="play-icon">▶</div>';
       // stopPropagation garante que o clique no overlay não suba pro wrapper
-      overlay.onclick = e => { e.stopPropagation(); toggleVideo(); };
+      overlay.onclick = e => {
+        // Clique no ícone ▶ → play/pause; clique no resto → lightbox
+        if (e.target.closest('.play-icon')) {
+          toggleVideo();
+        } else {
+          openLightbox(url, 'video');
+        }
+      };
       wrapper.appendChild(video);
       wrapper.appendChild(overlay);
       wrapper.appendChild(hint);
-      // Clique simples fora do overlay → lightbox
-      wrapper.onclick = e => { openLightbox(url, 'video'); };
+      wrapper.onclick = null;
       video.addEventListener('ended', () => {
         overlay.classList.remove('playing');
         btnPlay.textContent = '▶ Play Vídeo';
