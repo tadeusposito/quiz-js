@@ -138,12 +138,19 @@
   <div class="card">
     <h2>➕ Nova Questão</h2>
 
-    <label>Mídia (imagem ou vídeo) — opcional</label>
+    <label>Mídia da questão (exibida no telão durante a pergunta) — opcional</label>
     <div class="file-upload" id="dropZone" onclick="document.getElementById('mediaFile').click()">
-      <input type="file" id="mediaFile" accept="image/*,video/*" onchange="handleFile(this)">
+      <input type="file" id="mediaFile" accept="image/*,video/*" onchange="handleFile(this, 'main')">
       <span id="dropLabel">📎 Clique ou arraste uma imagem/vídeo aqui</span>
     </div>
     <div class="media-preview" id="mediaPreview"></div>
+
+    <label style="margin-top:4px;">Mídia de revelação (exibida no telão ao revelar a resposta) — opcional</label>
+    <div class="file-upload" id="dropZoneReveal" onclick="document.getElementById('mediaFileReveal').click()">
+      <input type="file" id="mediaFileReveal" accept="image/*,video/*" onchange="handleFile(this, 'reveal')">
+      <span id="dropLabelReveal">🔍 Clique ou arraste a imagem/vídeo de revelação aqui</span>
+    </div>
+    <div class="media-preview" id="mediaPreviewReveal"></div>
 
     <label>Texto da questão (o que aparece no celular e no telão)</label>
     <textarea id="qPrompt" placeholder="Ex: Este vídeo foi gerado por inteligência artificial?" rows="3"></textarea>
@@ -183,6 +190,7 @@
   let optionCount = 0;
   let correctIndex = 0;
   let selectedFile = null;
+  let selectedRevealFile = null;
 
   function doAuth() {
     adminPin = document.getElementById('pinIn').value;
@@ -241,27 +249,43 @@
   }
 
   // ── Arquivo ────────────────────────────────────────────────────────────────
-  function handleFile(input) {
-    selectedFile = input.files[0];
-    if (!selectedFile) return;
-    document.getElementById('dropLabel').textContent = `📎 ${selectedFile.name}`;
-    const preview = document.getElementById('mediaPreview');
-    const url = URL.createObjectURL(selectedFile);
-    if (selectedFile.type.startsWith('video')) {
+  function handleFile(input, type = 'main') {
+    const file = input.files[0];
+    if (!file) return;
+    const isReveal = type === 'reveal';
+    if (isReveal) { selectedRevealFile = file; }
+    else { selectedFile = file; }
+    const labelId = isReveal ? 'dropLabelReveal' : 'dropLabel';
+    const previewId = isReveal ? 'mediaPreviewReveal' : 'mediaPreview';
+    const icon = isReveal ? '🔍' : '📎';
+    document.getElementById(labelId).textContent = `${icon} ${file.name}`;
+    const preview = document.getElementById(previewId);
+    const url = URL.createObjectURL(file);
+    if (file.type.startsWith('video')) {
       preview.innerHTML = `<video src="${url}" controls style="max-width:100%;max-height:180px;border-radius:8px;"></video>`;
     } else {
       preview.innerHTML = `<img src="${url}" style="max-width:100%;max-height:180px;border-radius:8px;">`;
     }
   }
 
-  // Drag & drop
+  // Drag & drop — questão
   const dz = document.getElementById('dropZone');
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
   dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
   dz.addEventListener('drop', e => {
     e.preventDefault(); dz.classList.remove('drag');
     const f = e.dataTransfer.files[0];
-    if (f) { document.getElementById('mediaFile').files = e.dataTransfer.files; handleFile({ files: [f] }); }
+    if (f) { document.getElementById('mediaFile').files = e.dataTransfer.files; handleFile({ files: [f] }, 'main'); }
+  });
+
+  // Drag & drop — revelação
+  const dzReveal = document.getElementById('dropZoneReveal');
+  dzReveal.addEventListener('dragover', e => { e.preventDefault(); dzReveal.classList.add('drag'); });
+  dzReveal.addEventListener('dragleave', () => dzReveal.classList.remove('drag'));
+  dzReveal.addEventListener('drop', e => {
+    e.preventDefault(); dzReveal.classList.remove('drag');
+    const f = e.dataTransfer.files[0];
+    if (f) { document.getElementById('mediaFileReveal').files = e.dataTransfer.files; handleFile({ files: [f] }, 'reveal'); }
   });
 
   // ── Salvar questão ─────────────────────────────────────────────────────────
@@ -283,6 +307,7 @@
     fd.append('options', JSON.stringify(options));
     fd.append('correctIndex', cidx);
     if (selectedFile) fd.append('media', selectedFile);
+    if (selectedRevealFile) fd.append('revealMedia', selectedRevealFile);
 
     try {
       const r = await fetch('/api/questions', { method: 'POST', body: fd });
@@ -294,6 +319,10 @@
         document.getElementById('dropLabel').textContent = '📎 Clique ou arraste uma imagem/vídeo aqui';
         selectedFile = null;
         document.getElementById('mediaFile').value = '';
+        document.getElementById('mediaPreviewReveal').innerHTML = '';
+        document.getElementById('dropLabelReveal').textContent = '🔍 Clique ou arraste a imagem/vídeo de revelação aqui';
+        selectedRevealFile = null;
+        document.getElementById('mediaFileReveal').value = '';
         loadTemplate(['Fato', 'Fake'], 0);
         loadQuestions();
       } else {

@@ -421,11 +421,47 @@
 
   let _lastMediaUrl = null; // evita recriar o elemento de vídeo a cada update de respostas
 
+  function buildMediaElement(url, type, btnPlay) {
+    const wrapper = document.getElementById('mediaWrapper');
+    wrapper.innerHTML = '';
+    if (type === 'video') {
+      const video = document.createElement('video');
+      video.src = url;
+      video.preload = 'auto';
+      video.playsInline = true;
+      video.style.cssText = 'width:100%;max-height:340px;object-fit:contain;display:block;';
+      const overlay = document.createElement('div');
+      overlay.className = 'video-overlay';
+      overlay.id = 'videoOverlay';
+      overlay.innerHTML = '<div class="play-icon">▶</div>';
+      overlay.onclick = toggleVideo;
+      wrapper.appendChild(video);
+      wrapper.appendChild(overlay);
+      video.addEventListener('ended', () => {
+        overlay.classList.remove('playing');
+        btnPlay.textContent = '▶ Play Vídeo';
+      });
+      btnPlay.style.display = 'block';
+      btnPlay.textContent = '▶ Play Vídeo';
+    } else {
+      const img = document.createElement('img');
+      img.src = url;
+      img.style.cssText = 'width:100%;max-height:340px;object-fit:contain;display:block;';
+      wrapper.appendChild(img);
+      btnPlay.style.display = 'none';
+    }
+  }
+
   function renderQuestion(state) {
     const q = state.question;
     document.getElementById('qLabel').textContent = `Questão ${state.currentIndex + 1} de ${state.totalQuestions}`;
 
-    const hasMedia = !!q.mediaUrl;
+    // Na fase reveal, se houver mídia de revelação, usa ela; senão mantém a original
+    const isReveal = state.phase === 'reveal';
+    const activeMediaUrl  = (isReveal && q.revealMediaUrl)  ? q.revealMediaUrl  : q.mediaUrl;
+    const activeMediaType = (isReveal && q.revealMediaUrl)  ? q.revealMediaType : q.mediaType;
+
+    const hasMedia = !!activeMediaUrl;
     const layout = document.getElementById('qLayout');
     const mediaCol = document.getElementById('qMediaCol');
     const btnPlay = document.getElementById('btnPlayPause');
@@ -434,47 +470,15 @@
     mediaCol.classList.toggle('hidden', !hasMedia);
 
     if (hasMedia) {
-      // Prompt vai na coluna da mídia (esquerda); coluna direita fica só com opções
       document.getElementById('qPromptMedia').textContent = q.prompt;
       document.getElementById('qPromptBig').textContent = '';
 
-      // Só reconstrói o media element se mudou a questão
-      if (_lastMediaUrl !== q.mediaUrl) {
-        _lastMediaUrl = q.mediaUrl;
-        const wrapper = document.getElementById('mediaWrapper');
-        wrapper.innerHTML = '';
-
-        if (q.mediaType === 'video') {
-          const video = document.createElement('video');
-          video.src = q.mediaUrl;
-          video.preload = 'auto';
-          video.playsInline = true;
-          video.style.cssText = 'width:100%;max-height:340px;object-fit:contain;display:block;';
-          const overlay = document.createElement('div');
-          overlay.className = 'video-overlay';
-          overlay.id = 'videoOverlay';
-          overlay.innerHTML = '<div class="play-icon">▶</div>';
-          overlay.onclick = toggleVideo;
-          wrapper.appendChild(video);
-          wrapper.appendChild(overlay);
-
-          video.addEventListener('ended', () => {
-            overlay.classList.remove('playing');
-            btnPlay.textContent = '▶ Play Vídeo';
-          });
-
-          btnPlay.style.display = 'block';
-          btnPlay.textContent = '▶ Play Vídeo';
-        } else {
-          const img = document.createElement('img');
-          img.src = q.mediaUrl;
-          img.style.cssText = 'width:100%;max-height:340px;object-fit:contain;display:block;';
-          wrapper.appendChild(img);
-          btnPlay.style.display = 'none';
-        }
+      // Reconstrói se mudou a URL ativa (questão nova OU transição question→reveal com mídia diferente)
+      if (_lastMediaUrl !== activeMediaUrl) {
+        _lastMediaUrl = activeMediaUrl;
+        buildMediaElement(activeMediaUrl, activeMediaType, btnPlay);
       }
     } else {
-      // Sem mídia: prompt na coluna principal
       document.getElementById('qPromptBig').textContent = q.prompt;
       document.getElementById('qPromptMedia').textContent = '';
       if (_lastMediaUrl !== null) {

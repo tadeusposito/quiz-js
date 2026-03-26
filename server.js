@@ -52,6 +52,10 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage, limits: { fileSize: 150 * 1024 * 1024 } });
+const uploadFields = upload.fields([
+  { name: 'media', maxCount: 1 },
+  { name: 'revealMedia', maxCount: 1 }
+]);
 
 // ── Estado global (em memória) ────────────────────────────────────────────────
 const state = {
@@ -87,16 +91,21 @@ app.post('/api/auth', (req, res) => {
 });
 
 // Upload de questão
-app.post('/api/questions', upload.single('media'), (req, res) => {
+app.post('/api/questions', uploadFields, (req, res) => {
   if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
   const { prompt, options, correctIndex } = req.body;
   const parsedOptions = JSON.parse(options);
   const parsedCorrect = parseInt(correctIndex, 10);
 
+  const mediaFile = req.files?.media?.[0];
+  const revealFile = req.files?.revealMedia?.[0];
+
   const q = {
     id: Date.now().toString(),
-    mediaType: req.file ? (req.file.mimetype.startsWith('video') ? 'video' : 'image') : null,
-    mediaUrl: req.file ? `/uploads/${req.file.filename}` : null,
+    mediaType: mediaFile ? (mediaFile.mimetype.startsWith('video') ? 'video' : 'image') : null,
+    mediaUrl: mediaFile ? `/uploads/${mediaFile.filename}` : null,
+    revealMediaType: revealFile ? (revealFile.mimetype.startsWith('video') ? 'video' : 'image') : null,
+    revealMediaUrl: revealFile ? `/uploads/${revealFile.filename}` : null,
     prompt,
     options: parsedOptions.map((label, i) => ({ label, correct: i === parsedCorrect })),
   };
@@ -158,9 +167,11 @@ function buildPublicState() {
       id: q.id,
       mediaType: q.mediaType,
       mediaUrl: q.mediaUrl,
+      // Mídia de revelação só vai no reveal
+      revealMediaType: state.phase === 'reveal' ? (q.revealMediaType || null) : null,
+      revealMediaUrl: state.phase === 'reveal' ? (q.revealMediaUrl || null) : null,
       prompt: q.prompt,
       optionLabels: q.options.map(o => o.label),
-      // Correct só vai no reveal
       correctIndex: state.phase === 'reveal' ? q.options.findIndex(o => o.correct) : null,
     } : null,
     participantCount: Object.keys(state.participants).length,
