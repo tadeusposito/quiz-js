@@ -169,8 +169,37 @@
 <script>
   const socket = io();
   let myName = '';
-  let myAnswer = null; // índice respondido nesta questão
+  let myAnswer = null;
   let totalQuestions = 0;
+
+  // ── ID persistente no localStorage ─────────────────────────────────────────
+  // Gerado na primeira visita e mantido entre refreshes/reconexões.
+  // Apagado só quando o servidor manda 'kicked' (reset do quiz).
+  function getOrCreatePlayerId() {
+    let id = localStorage.getItem('quiz_player_id');
+    if (!id) {
+      id = 'p_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+      localStorage.setItem('quiz_player_id', id);
+    }
+    return id;
+  }
+  const myPlayerId = getOrCreatePlayerId();
+
+  // ── Reconexão automática ao carregar/recarregar ─────────────────────────────
+  // Se tiver nome salvo, tenta retomar sem mostrar tela de nome.
+  const savedName = localStorage.getItem('quiz_player_name');
+  if (savedName) {
+    myName = savedName;
+  }
+
+  socket.on('connect', () => {
+    // Sempre que conectar (inclusive após refresh), tenta rejoin se tiver nome salvo
+    const name = localStorage.getItem('quiz_player_name');
+    if (name) {
+      myName = name;
+      socket.emit('join', { name, playerId: myPlayerId });
+    }
+  });
 
   function show(id) {
     ['screen-join','screen-lobby','screen-question','screen-ranking'].forEach(s => {
@@ -185,8 +214,9 @@
       return;
     }
     myName = name;
+    localStorage.setItem('quiz_player_name', name);
     document.getElementById('joinBtn').disabled = true;
-    socket.emit('join', { name });
+    socket.emit('join', { name, playerId: myPlayerId });
   }
 
   document.getElementById('nameInput').addEventListener('keydown', e => {
@@ -201,6 +231,9 @@
   socket.on('state', applyState);
 
   socket.on('kicked', () => {
+    // Reset completo: limpa localStorage e volta pra tela de nome
+    localStorage.removeItem('quiz_player_name');
+    localStorage.removeItem('quiz_player_id');
     myName = '';
     myAnswer = null;
     renderQuestion._lastIndex = -1;

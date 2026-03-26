@@ -193,26 +193,21 @@ function buildPresenterExtra() {
 io.on('connection', (socket) => {
 
   // ── Participante entra ──────────────────────────────────────────────────────
-  socket.on('join', ({ name }) => {
-    if (!name || name.trim().length < 2) return;
-    // Re-join por nome (reconexão)
-    const existing = Object.entries(state.participants).find(([sid, p]) => p.name.trim().toLowerCase() === name.trim().toLowerCase());
-    if (existing) {
-      const [oldSid, data] = existing;
-      if (oldSid !== socket.id) {
-        state.participants[socket.id] = data;
-        delete state.participants[oldSid];
-        // Remapear respostas
-        Object.keys(state.answers).forEach(key => {
-          if (key.startsWith(oldSid + '_')) {
-            state.answers[socket.id + '_' + key.split('_')[1]] = state.answers[key];
-            delete state.answers[key];
-          }
-        });
-      }
+  // Usa playerId (gerado e salvo no localStorage do celular) como chave estável.
+  // Sobrevive a refresh, queda de conexão, troca de socketId — tudo.
+  socket.on('join', ({ name, playerId }) => {
+    if (!name || name.trim().length < 2 || !playerId) return;
+
+    if (state.participants[playerId]) {
+      // Reconexão: participante já existe, só atualiza o socketId mapeado
+      state.participants[playerId].socketId = socket.id;
     } else {
-      state.participants[socket.id] = { name: name.trim(), score: 0, totalMs: 0, answers: [] };
+      // Primeiro acesso
+      state.participants[playerId] = { name: name.trim(), score: 0, totalMs: 0, answers: [], socketId: socket.id };
     }
+
+    // Mapeia socketId → playerId para lookup rápido no answer
+    socket._playerId = playerId;
 
     socket.emit('joined', buildPublicState());
     io.to('presenter').emit('presenterExtra', buildPresenterExtra());
@@ -220,9 +215,10 @@ io.on('connection', (socket) => {
 
   // ── Resposta do participante ────────────────────────────────────────────────
   socket.on('answer', ({ optionIndex }) => {
-    const p = state.participants[socket.id];
+    const playerId = socket._playerId;
+    const p = playerId && state.participants[playerId];
     if (!p || state.phase !== 'question' || state.currentIndex < 0) return;
-    const key = `${socket.id}_${state.currentIndex}`;
+    const key = `${playerId}_${state.currentIndex}`;
     if (state.answers[key]) return; // já respondeu
 
     const ms = Date.now() - state.questionStartedAt;
