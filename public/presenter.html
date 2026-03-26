@@ -604,8 +604,8 @@
       wrapper.appendChild(video);
       wrapper.appendChild(overlay);
       wrapper.appendChild(hint);
-      // Duplo clique em qualquer parte → lightbox
-      wrapper.ondblclick = e => { e.stopPropagation(); openLightbox(url, 'video'); };
+      // Clique simples fora do overlay → lightbox
+      wrapper.onclick = e => { openLightbox(url, 'video'); };
       video.addEventListener('ended', () => {
         overlay.classList.remove('playing');
         btnPlay.textContent = '▶ Play Vídeo';
