@@ -331,6 +331,11 @@
   </div>
 </div>
 
+<!-- Lightbox -->
+<div id="lightbox" onclick="closeLightbox()">
+  <div id="lightbox-close" onclick="closeLightbox()">✕</div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -443,20 +448,41 @@
 
   let _lastMediaUrl = null; // evita recriar o elemento de vídeo a cada update de respostas
 
-  function toggleFullscreen() {
-    const wrapper = document.getElementById('mediaWrapper');
-    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-      (wrapper.requestFullscreen || wrapper.webkitRequestFullscreen).call(wrapper);
+  function openLightbox(url, type) {
+    const lb = document.getElementById('lightbox');
+    lb.innerHTML = '<div id="lightbox-close" onclick="closeLightbox()">✕</div>';
+    if (type === 'video') {
+      const v = document.createElement('video');
+      v.src = url; v.controls = true; v.autoplay = true; v.playsInline = true;
+      v.style.cssText = 'max-width:96vw;max-height:94vh;object-fit:contain;border-radius:6px;';
+      v.onclick = e => e.stopPropagation();
+      lb.appendChild(v);
     } else {
-      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      const img = document.createElement('img');
+      img.src = url;
+      img.style.cssText = 'max-width:96vw;max-height:94vh;object-fit:contain;border-radius:6px;';
+      img.onclick = e => e.stopPropagation();
+      lb.appendChild(img);
     }
+    lb.classList.add('open');
   }
+
+  function closeLightbox() {
+    const lb = document.getElementById('lightbox');
+    lb.classList.remove('open');
+    // Pausa vídeo se houver
+    const v = lb.querySelector('video');
+    if (v) v.pause();
+  }
+
+  // Fechar com ESC
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
 
   function buildMediaElement(url, type, btnPlay) {
     const wrapper = document.getElementById('mediaWrapper');
     wrapper.innerHTML = '';
 
-    // Ícone de fullscreen
+    // Ícone de expandir
     const hint = document.createElement('div');
     hint.className = 'fullscreen-hint';
     hint.textContent = '⛶';
@@ -471,13 +497,12 @@
       overlay.className = 'video-overlay';
       overlay.id = 'videoOverlay';
       overlay.innerHTML = '<div class="play-icon">▶</div>';
-      // Vídeo: overlay faz play/pause, clique fora do overlay faz fullscreen
       overlay.onclick = toggleVideo;
       wrapper.appendChild(video);
       wrapper.appendChild(overlay);
       wrapper.appendChild(hint);
-      // Clique direto no wrapper (não no overlay) abre fullscreen
-      wrapper.onclick = (e) => { if (e.target === wrapper) toggleFullscreen(); };
+      // Duplo clique → lightbox
+      wrapper.ondblclick = (e) => { e.stopPropagation(); openLightbox(url, 'video'); };
       video.addEventListener('ended', () => {
         overlay.classList.remove('playing');
         btnPlay.textContent = '▶ Play Vídeo';
@@ -487,18 +512,13 @@
     } else {
       const img = document.createElement('img');
       img.src = url;
-      img.style.cssText = 'width:100%;max-height:500px;object-fit:contain;display:block;cursor:zoom-in;';
+      img.style.cssText = 'width:100%;max-height:500px;object-fit:contain;display:block;';
       wrapper.appendChild(img);
       wrapper.appendChild(hint);
-      // Imagem: clique em qualquer lugar abre fullscreen
-      wrapper.onclick = toggleFullscreen;
+      // Clique simples → lightbox
+      wrapper.onclick = () => openLightbox(url, 'image');
       btnPlay.style.display = 'none';
     }
-
-    // ESC fecha (já tratado pelo browser), mas atualiza cursor
-    document.addEventListener('fullscreenchange', () => {
-      wrapper.style.cursor = document.fullscreenElement ? 'zoom-out' : 'zoom-in';
-    });
   }
 
   function renderQuestion(state) {
@@ -540,7 +560,7 @@
     // Opções
     const grid = document.getElementById('optionsGrid');
     const n = q.optionLabels.length;
-    grid.className = `options-grid cols-${n <= 3 ? n : 2}`;
+    grid.className = `options-grid cols-${n <= 3 ? n : 2}${hasMedia ? ' has-media' : ''}`;
     const answerTotal = state.answerTotal || 0;
     grid.innerHTML = '';
     q.optionLabels.forEach((label, i) => {
