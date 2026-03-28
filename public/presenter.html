@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Telão – Jovem Senador Quiz</title>
+<title>Telão – Quiz</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -285,7 +285,7 @@
 
 <!-- PIN -->
 <div id="pin-screen">
-  <h2>🏛 Telão – Jovem Senador</h2>
+  <h2 id="pinScreenTitle">Telão</h2>
   <input type="password" id="pinInput" placeholder="PIN" maxlength="8" />
   <br>
   <button onclick="authPresenter()">Entrar</button>
@@ -393,6 +393,15 @@
   let presenterPin = '';
   let currentState = null;
 
+  // Busca nome do evento assim que carrega (antes de autenticar)
+  fetch('/api/config').then(r => r.json()).then(cfg => {
+    if (cfg.eventName) {
+      const el = document.getElementById('pinScreenTitle');
+      if (el) el.textContent = cfg.eventName;
+      document.title = cfg.eventName;
+    }
+  }).catch(() => {});
+
   function authPresenter() {
     presenterPin = document.getElementById('pinInput').value;
     socket.emit('presenterJoin', { pin: presenterPin });
@@ -405,6 +414,7 @@
 
   socket.on('presenterState', (state) => {
     document.getElementById('pin-screen').style.display = 'none';
+    if (state.config?.eventName) document.title = state.config.eventName;
     // Pré-carrega todas as mídias na primeira vez que recebe as questions
     if (!currentState && state.questions) preloadAllMedia(state.questions);
     // Nova questão → força rebuild da mídia
@@ -473,7 +483,7 @@
           const name = state.config.quizNames?.[i] || `Quiz ${i}`;
           const btn = document.createElement('button');
           btn.className = `quiz-btn quiz-btn-${i}`;
-          btn.innerHTML = `${name}<span class="quiz-btn-count">${count} questão${count !== 1 ? 'ões' : ''}</span>`;
+          btn.innerHTML = `${name}<span class="quiz-btn-count">${count} ${count !== 1 ? 'questões' : 'questão'}</span>`;
           btn.onclick = () => selectQuiz(i);
           container.appendChild(btn);
         }

@@ -617,7 +617,7 @@
     })).filter(x => x.count > 0);
 
     list.innerHTML = `<div style="margin-bottom:12px;font-size:13px;color:#5a82b8;display:flex;flex-wrap:wrap;gap:12px;">
-      ${qCounts.map(x => `<span>Quiz ${x.id} – <em>${x.name}</em>: <strong style="color:#fff">${x.count}</strong> questão${x.count!==1?'ões':''}</span>`).join(' | ')}
+      ${qCounts.map(x => `<span>Quiz ${x.id} – <em>${x.name}</em>: <strong style="color:#fff">${x.count}</strong> ${x.count!==1?'questões':'questão'}</span>`).join(' | ')}
     </div>` + questions.map((q, i) => {
       const qid = q.quizId || 1;
       const opts = q.options.map(o =>
