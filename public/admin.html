@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Admin – Jovem Senador Quiz</title>
+<title>Admin – Quiz</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -178,7 +178,7 @@
 
 <!-- AUTH -->
 <div id="auth-screen">
-  <h2>🔒 Admin – Jovem Senador Quiz</h2>
+  <h2>🔒 Admin</h2>
   <input type="password" id="pinIn" placeholder="PIN Admin" maxlength="8" />
   <button onclick="doAuth()">Entrar</button>
   <div id="auth-error"></div>
@@ -436,13 +436,15 @@
     }
   }
 
-  function doAuth() {
+  async function doAuth() {
     adminPin = document.getElementById('pinIn').value;
-    fetch('/api/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin: adminPin, role: 'admin' })
-    }).then(r => r.json()).then(d => {
+    try {
+      const r = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: adminPin, role: 'admin' })
+      });
+      const d = await r.json();
       if (d.ok) {
         document.getElementById('auth-screen').style.display = 'none';
         document.getElementById('main-page').style.display = 'block';
@@ -452,7 +454,9 @@
       } else {
         document.getElementById('auth-error').textContent = 'PIN incorreto.';
       }
-    });
+    } catch (e) {
+      document.getElementById('auth-error').textContent = 'Erro de conexão.';
+    }
   }
   document.getElementById('pinIn').addEventListener('keydown', e => { if (e.key === 'Enter') doAuth(); });
 
