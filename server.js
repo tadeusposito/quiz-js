@@ -22,6 +22,8 @@ fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const DEFAULT_CONFIG = {
   eventName: 'Quiz Interativo',
+  logoUrl: null,   // URL relativa do logo exibido no presenter (/uploads/logo_xxx.png)
+  font: 'Inter',   // Fonte principal
   quizNames: { 1: 'Quiz 1', 2: 'Quiz 2', 3: 'Quiz 3', 4: 'Quiz 4', 5: 'Quiz 5' },
   colors: {
     // Geral
@@ -58,6 +60,7 @@ function loadConfig() {
         quizNames: { ...DEFAULT_CONFIG.quizNames, ...(saved.quizNames || {}) },
         colors: { ...DEFAULT_CONFIG.colors, ...(saved.colors || {}) }
       };
+      // logoUrl e font ficam no spread acima
     }
   } catch (e) { console.error('Erro ao carregar config.json:', e.message); }
   return { ...DEFAULT_CONFIG, quizNames: { ...DEFAULT_CONFIG.quizNames } };
@@ -131,8 +134,12 @@ app.get('/api/config', (req, res) => res.json(state.config));
 // Salvar configuração (somente admin)
 app.post('/api/config', (req, res) => {
   if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
-  const { eventName, quizNames, colors } = req.body;
+  const { eventName, quizNames, colors, font } = req.body;
   if (eventName !== undefined) state.config.eventName = String(eventName).trim() || DEFAULT_CONFIG.eventName;
+  if (font !== undefined) {
+    const allowed = ['Inter','Roboto','Montserrat','Oswald','Nunito','Lato','Poppins','Raleway','Ubuntu','Barlow'];
+    if (allowed.includes(font)) state.config.font = font;
+  }
   if (quizNames) {
     for (let i = 1; i <= 5; i++) {
       if (quizNames[i] !== undefined) state.config.quizNames[i] = String(quizNames[i]).trim() || DEFAULT_CONFIG.quizNames[i];
@@ -200,6 +207,35 @@ app.delete('/api/questions/:id', (req, res) => {
     if (fs.existsSync(fp)) fs.unlinkSync(fp);
   }
   saveQuestions(state.questions);
+  res.json({ ok: true });
+});
+
+// Upload de logo
+app.post('/api/config/logo', upload.single('logo'), (req, res) => {
+  if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
+  if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+  // Remove logo anterior se existir
+  if (state.config.logoUrl) {
+    const old = path.join(UPLOADS_DIR, path.basename(state.config.logoUrl));
+    if (fs.existsSync(old)) try { fs.unlinkSync(old); } catch(e) {}
+  }
+  state.config.logoUrl = `/uploads/${req.file.filename}`;
+  saveConfig(state.config);
+  io.emit('config', state.config);
+  io.to('presenter').emit('presenterState', presenterFullState());
+  res.json({ ok: true, logoUrl: state.config.logoUrl });
+});
+
+// Remover logo
+app.delete('/api/config/logo', (req, res) => {
+  if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
+  if (state.config.logoUrl) {
+    const fp = path.join(UPLOADS_DIR, path.basename(state.config.logoUrl));
+    if (fs.existsSync(fp)) try { fs.unlinkSync(fp); } catch(e) {}
+    state.config.logoUrl = null;
+    saveConfig(state.config);
+    io.emit('config', state.config);
+  }
   res.json({ ok: true });
 });
 

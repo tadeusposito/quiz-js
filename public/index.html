@@ -242,6 +242,19 @@
 
   socket.on('config', applyConfig);
 
+  const _loadedFonts = {};
+  function applyFont(font) {
+    if (!font || font === 'Inter') { document.body.style.fontFamily = ''; return; }
+    if (!_loadedFonts[font]) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = `https://fonts.googleapis.com/css2?family=${font.replace(/ /g,'+')}:wght@400;700;800&display=swap`;
+      document.head.appendChild(link);
+      _loadedFonts[font] = true;
+    }
+    document.body.style.fontFamily = `'${font}', system-ui, sans-serif`;
+  }
+
   function applyConfig(cfg) {
     if (!cfg) return;
     const name = cfg.eventName || 'Quiz';
@@ -249,6 +262,7 @@
     if (t) t.textContent = name;
     document.title = name;
     if (cfg.colors) applyColors(cfg.colors);
+    if (cfg.font) applyFont(cfg.font);
   }
 
   function applyColors(c) {

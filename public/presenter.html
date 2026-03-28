@@ -51,8 +51,9 @@
     display: flex; align-items: center; justify-content: space-between;
     flex-shrink: 0;
   }
-  .header-brand { font-size: 13px; color: var(--dourado); letter-spacing: 2px; text-transform: uppercase; }
-  .header-brand span { color: #fff; font-size: 18px; font-weight: 800; }
+  .header-brand { display: flex; align-items: center; gap: 14px; }
+  .header-brand span { color: #fff; font-size: 18px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+  #headerLogo { height: 40px; max-width: 140px; object-fit: contain; display: none; }
   .header-stats { display: flex; gap: 24px; align-items: center; }
   .stat-pill {
     background: var(--card); border: 1px solid #1e3860; border-radius: 20px;
@@ -295,6 +296,7 @@
 <!-- HEADER -->
 <div class="header">
   <div class="header-brand">
+    <img id="headerLogo" src="" alt="logo">
     <span id="headerEventName">Quiz Interativo</span>
   </div>
   <div class="header-stats">
@@ -400,6 +402,7 @@
       if (el) el.textContent = cfg.eventName;
       document.title = cfg.eventName;
     }
+    if (cfg.font) applyFont(cfg.font);
   }).catch(() => {});
 
   function authPresenter() {
@@ -428,6 +431,19 @@
   });
 
   // Também recebe eventos gerais de estado
+  const _loadedFonts = {};
+  function applyFont(font) {
+    if (!font || font === 'Inter') { document.body.style.fontFamily = ''; return; }
+    if (!_loadedFonts[font]) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = `https://fonts.googleapis.com/css2?family=${font.replace(/ /g,'+')}:wght@400;700;800;900&display=swap`;
+      document.head.appendChild(link);
+      _loadedFonts[font] = true;
+    }
+    document.body.style.fontFamily = `'${font}', system-ui, sans-serif`;
+  }
+
   socket.on('config', (cfg) => {
     if (currentState) {
       currentState.config = cfg;
@@ -462,13 +478,26 @@
     document.getElementById('hdrPhase').textContent = (phaseNames[state.phase] || state.phase) + quizLabel;
     document.getElementById('phaseLabel').textContent = (phaseNames[state.phase] || state.phase) + quizLabel;
 
-    // Nomes do evento e dos quizes
+    // Nomes do evento, logo e fonte
     if (state.config) {
       const eName = state.config.eventName || 'Quiz Interativo';
       const hdr = document.getElementById('headerEventName');
       const sel = document.getElementById('selectEventName');
       if (hdr) hdr.textContent = eName;
       if (sel) sel.textContent = eName;
+      document.title = eName;
+      // Logo
+      const logoEl = document.getElementById('headerLogo');
+      if (logoEl) {
+        if (state.config.logoUrl) {
+          logoEl.src = state.config.logoUrl;
+          logoEl.style.display = 'block';
+        } else {
+          logoEl.style.display = 'none';
+        }
+      }
+      // Fonte
+      applyFont(state.config.font || 'Inter');
     }
 
     // Botões de seleção de quiz — só mostra quizes com questões

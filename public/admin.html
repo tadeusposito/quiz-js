@@ -154,6 +154,18 @@
   .quiz-name-field label { font-size: 11px; color: #5a82b8; margin-bottom: 0; font-weight: 700; }
   .quiz-name-field input { margin-bottom: 0; }
   .quiz-name-inactive { opacity: 0.45; }
+  .logo-upload-area {
+    border: 2px dashed #1e3860; border-radius: 10px; padding: 16px;
+    text-align: center; cursor: pointer; transition: border-color .2s;
+    color: #5a82b8; font-size: 14px; margin-bottom: 8px;
+  }
+  .logo-upload-area:hover { border-color: #1e5dbf; color: #fff; }
+  .logo-preview { max-height: 60px; max-width: 200px; border-radius: 6px; margin: 8px auto; display: block; }
+  select.font-select {
+    width: 100%; padding: 11px 14px; font-size: 15px; border-radius: 9px;
+    border: 1px solid #1e3860; background: #090f1e; color: #fff;
+    outline: none; margin-bottom: 16px; cursor: pointer;
+  }
 
   /* Badge de quiz */
   .quiz-badge {
@@ -185,7 +197,7 @@
 </div>
 
 <div class="page" id="main-page" style="display:none">
-  <h1>🏛 Jovem Senador – Gerenciador de Quiz</h1>
+  <h1 id="adminTitle">Gerenciador de Quiz</h1>
   <p class="subtitle">Cadastre as questões abaixo. Após subir todas, acesse <strong>/presenter</strong> no telão.</p>
 
   <!-- CONFIG -->
@@ -203,6 +215,31 @@
       <div class="quiz-name-field" id="qnf4"><label>Quiz 4</label><input type="text" id="cfgQ4" placeholder="Quiz 4" maxlength="40" /></div>
       <div class="quiz-name-field" id="qnf5"><label>Quiz 5</label><input type="text" id="cfgQ5" placeholder="Quiz 5" maxlength="40" /></div>
     </div>
+    <!-- Logo -->
+    <label style="margin-top:8px;">Logo da marca (aparece no telão ao lado do nome do evento)</label>
+    <p style="font-size:12px;color:#5a82b8;margin-bottom:8px;">Recomendado: PNG transparente, 200×60px</p>
+    <div class="logo-upload-area" id="logoDropZone" onclick="document.getElementById('logoFile').click()">
+      <input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadLogo(this)">
+      <span id="logoDropLabel">📎 Clique para enviar PNG ou JPG</span>
+    </div>
+    <div id="logoPreviewArea"></div>
+    <button class="color-reset-btn" id="logoRemoveBtn" style="display:none;margin-bottom:12px;" onclick="removeLogo()">✕ Remover logo</button>
+
+    <!-- Fonte -->
+    <label>Fonte principal (celulares e telão)</label>
+    <select class="font-select" id="cfgFont" onchange="previewFont(this.value)">
+      <option value="Inter">Inter (padrão)</option>
+      <option value="Roboto">Roboto</option>
+      <option value="Montserrat">Montserrat</option>
+      <option value="Oswald">Oswald</option>
+      <option value="Nunito">Nunito</option>
+      <option value="Lato">Lato</option>
+      <option value="Poppins">Poppins</option>
+      <option value="Raleway">Raleway</option>
+      <option value="Ubuntu">Ubuntu</option>
+      <option value="Barlow">Barlow</option>
+    </select>
+
     <!-- Aparência -->
     <details class="color-section" id="colorDetails">
       <summary style="cursor:pointer;font-size:14px;color:var(--dourado);font-weight:700;padding:8px 0;list-style:none;display:flex;align-items:center;gap:8px;">
@@ -338,11 +375,22 @@
     eventConfig = await r.json();
     // Preencher campos
     document.getElementById('cfgEventName').value = eventConfig.eventName || '';
+    const titleEl = document.getElementById('adminTitle');
+    if (titleEl && eventConfig.eventName) titleEl.textContent = eventConfig.eventName + ' – Admin';
     for (let i = 1; i <= 5; i++) {
       const el = document.getElementById(`cfgQ${i}`);
       if (el) el.value = eventConfig.quizNames?.[i] || `Quiz ${i}`;
     }
     fillColorFields(eventConfig.colors);
+    // Fonte
+    const fontSel = document.getElementById('cfgFont');
+    if (fontSel && eventConfig.font) fontSel.value = eventConfig.font;
+    // Logo
+    if (eventConfig.logoUrl) {
+      document.getElementById('logoDropLabel').textContent = '✅ Logo carregado';
+      document.getElementById('logoPreviewArea').innerHTML = `<img src="${eventConfig.logoUrl}" class="logo-preview">`;
+      document.getElementById('logoRemoveBtn').style.display = 'inline-block';
+    }
     updateFormQuizLabels();
     renderList();
   }
@@ -352,6 +400,52 @@
       const btn = document.getElementById(`formQuiz${i}`);
       if (btn) btn.textContent = eventConfig.quizNames?.[i] || `Quiz ${i}`;
     }
+  }
+
+  // ── Logo ──────────────────────────────────────────────────────────────────
+  async function uploadLogo(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('pin', adminPin);
+    fd.append('logo', file);
+    const r = await fetch('/api/config/logo', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      eventConfig.logoUrl = d.logoUrl;
+      document.getElementById('logoDropLabel').textContent = '✅ ' + file.name;
+      document.getElementById('logoPreviewArea').innerHTML = `<img src="${d.logoUrl}?t=${Date.now()}" class="logo-preview">`;
+      document.getElementById('logoRemoveBtn').style.display = 'inline-block';
+      showStatus('cfgStatus', '✅ Logo salvo!', true);
+    } else {
+      showStatus('cfgStatus', 'Erro ao enviar logo.', false);
+    }
+  }
+
+  async function removeLogo() {
+    if (!confirm('Remover o logo?')) return;
+    await fetch('/api/config/logo', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: adminPin })
+    });
+    eventConfig.logoUrl = null;
+    document.getElementById('logoDropLabel').textContent = '📎 Clique para enviar PNG ou JPG';
+    document.getElementById('logoPreviewArea').innerHTML = '';
+    document.getElementById('logoRemoveBtn').style.display = 'none';
+  }
+
+  // ── Fonte ──────────────────────────────────────────────────────────────────
+  const FONT_LINKS = {};
+  function previewFont(font) {
+    if (!FONT_LINKS[font]) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = `https://fonts.googleapis.com/css2?family=${font.replace(/ /g,'+')}&display=swap`;
+      document.head.appendChild(link);
+      FONT_LINKS[font] = true;
+    }
+    document.body.style.fontFamily = `'${font}', system-ui, sans-serif`;
   }
 
   // ── Cores ─────────────────────────────────────────────────────────────────
@@ -413,6 +507,7 @@
       eventName: document.getElementById('cfgEventName').value.trim(),
       quizNames,
       colors: collectColors(),
+      font: document.getElementById('cfgFont')?.value || 'Inter',
     };
     const r = await fetch('/api/config', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -421,6 +516,15 @@
     if (d.ok) {
       eventConfig = d.config;
       fillColorFields(eventConfig.colors);
+    // Fonte
+    const fontSel = document.getElementById('cfgFont');
+    if (fontSel && eventConfig.font) fontSel.value = eventConfig.font;
+    // Logo
+    if (eventConfig.logoUrl) {
+      document.getElementById('logoDropLabel').textContent = '✅ Logo carregado';
+      document.getElementById('logoPreviewArea').innerHTML = `<img src="${eventConfig.logoUrl}" class="logo-preview">`;
+      document.getElementById('logoRemoveBtn').style.display = 'inline-block';
+    }
       updateFormQuizLabels();
       renderList();
       showStatus('cfgStatus', '✅ Configurações salvas!', true);
