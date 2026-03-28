@@ -270,9 +270,13 @@
   .quiz-btn-1:hover { background: #1a3a6a; transform: scale(1.04); }
   .quiz-btn-2 { background: #1e1400; border-color: var(--dourado); color: #fff; }
   .quiz-btn-2:hover { background: #3a2800; transform: scale(1.04); }
-  .quiz-btn-count { font-size: 14px; font-weight: 400; color: #7a9cc8; }
-  .quiz-btn-1 .quiz-btn-count { color: #7a9cc8; }
-  .quiz-btn-2 .quiz-btn-count { color: #c8a84b; }
+  .quiz-btn-3 { background: #1a0a1e; border-color: #a855f7; color: #fff; }
+  .quiz-btn-3:hover { background: #2d1040; transform: scale(1.04); }
+  .quiz-btn-4 { background: #001a14; border-color: #10b981; color: #fff; }
+  .quiz-btn-4:hover { background: #00301e; transform: scale(1.04); }
+  .quiz-btn-5 { background: #1a0a00; border-color: #f97316; color: #fff; }
+  .quiz-btn-5:hover { background: #301200; transform: scale(1.04); }
+  .quiz-btn-count { font-size: 13px; font-weight: 400; opacity: .8; }
 
   .hidden { display: none !important; }
 </style>
@@ -291,7 +295,7 @@
 <!-- HEADER -->
 <div class="header">
   <div class="header-brand">
-    🏛 Senado Federal &nbsp;<span>JOVEM SENADOR</span> &nbsp;– Quiz
+    <span id="headerEventName">Quiz Interativo</span>
   </div>
   <div class="header-stats">
     <div class="stat-pill">Questão <strong id="hdrQ">–</strong></div>
@@ -306,18 +310,9 @@
 
     <!-- SELEÇÃO DE QUIZ -->
     <div id="select-quiz-view" class="hidden">
-      <div class="quiz-select-title">🏛 Jovem Senador – Quiz</div>
+      <div class="quiz-select-title" id="selectEventName">Quiz Interativo</div>
       <div class="quiz-select-sub">Selecione qual quiz iniciar</div>
-      <div class="quiz-select-btns">
-        <button class="quiz-btn quiz-btn-1" onclick="selectQuiz(1)">
-          Quiz 1
-          <span class="quiz-btn-count" id="quiz1count">0 questões</span>
-        </button>
-        <button class="quiz-btn quiz-btn-2" onclick="selectQuiz(2)">
-          Quiz 2
-          <span class="quiz-btn-count" id="quiz2count">0 questões</span>
-        </button>
-      </div>
+      <div class="quiz-select-btns" id="quizSelectBtns"></div>
     </div>
 
     <!-- LOBBY -->
@@ -423,6 +418,13 @@
   });
 
   // Também recebe eventos gerais de estado
+  socket.on('config', (cfg) => {
+    if (currentState) {
+      currentState.config = cfg;
+      applyState(currentState);
+    }
+  });
+
   socket.on('state', (state) => {
     if (currentState) {
       if (currentState.currentIndex !== state.currentIndex) _lastMediaUrl = null;
@@ -444,18 +446,38 @@
     document.getElementById('hdrP').textContent = state.participantCount || 0;
     document.getElementById('hdrQ').textContent = state.currentIndex >= 0 ? `${state.currentIndex + 1}/${state.totalQuestions}` : '–';
     const phaseNames = { selectQuiz: 'Seleção', lobby: 'Lobby', question: 'Respondendo', reveal: 'Revelando', ranking: 'Ranking', finished: 'Encerrado' };
-    const quizLabel = state.activeQuiz ? ` · Quiz ${state.activeQuiz}` : '';
+    const activeQuizName = state.activeQuiz && state.config?.quizNames?.[state.activeQuiz]
+      ? state.config.quizNames[state.activeQuiz] : (state.activeQuiz ? `Quiz ${state.activeQuiz}` : '');
+    const quizLabel = activeQuizName ? ` · ${activeQuizName}` : '';
     document.getElementById('hdrPhase').textContent = (phaseNames[state.phase] || state.phase) + quizLabel;
     document.getElementById('phaseLabel').textContent = (phaseNames[state.phase] || state.phase) + quizLabel;
 
-    // Atualiza contagem de questões por quiz na tela de seleção
-    if (state.questions) {
-      const c1 = state.questions.filter(q => (q.quizId || 1) === 1).length;
-      const c2 = state.questions.filter(q => (q.quizId || 1) === 2).length;
-      const el1 = document.getElementById('quiz1count');
-      const el2 = document.getElementById('quiz2count');
-      if (el1) el1.textContent = `${c1} questão${c1 !== 1 ? 'ões' : ''}`;
-      if (el2) el2.textContent = `${c2} questão${c2 !== 1 ? 'ões' : ''}`;
+    // Nomes do evento e dos quizes
+    if (state.config) {
+      const eName = state.config.eventName || 'Quiz Interativo';
+      const hdr = document.getElementById('headerEventName');
+      const sel = document.getElementById('selectEventName');
+      if (hdr) hdr.textContent = eName;
+      if (sel) sel.textContent = eName;
+    }
+
+    // Botões de seleção de quiz — só mostra quizes com questões
+    if (state.questions && state.config) {
+      const colors = ['#1e5dbf','#c8a84b','#a855f7','#10b981','#f97316'];
+      const container = document.getElementById('quizSelectBtns');
+      if (container) {
+        container.innerHTML = '';
+        for (let i = 1; i <= 5; i++) {
+          const count = state.questions.filter(q => (q.quizId || 1) === i).length;
+          if (count === 0) continue;
+          const name = state.config.quizNames?.[i] || `Quiz ${i}`;
+          const btn = document.createElement('button');
+          btn.className = `quiz-btn quiz-btn-${i}`;
+          btn.innerHTML = `${name}<span class="quiz-btn-count">${count} questão${count !== 1 ? 'ões' : ''}</span>`;
+          btn.onclick = () => selectQuiz(i);
+          container.appendChild(btn);
+        }
+      }
     }
 
     // Botões

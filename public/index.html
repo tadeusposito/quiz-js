@@ -130,8 +130,8 @@
 
 <!-- JOIN -->
 <div id="screen-join">
-  <div class="logo">🏛 Senado Federal</div>
-  <h1>Jovem Senador</h1>
+  <div class="logo" id="joinLogo">🏛</div>
+  <h1 id="joinTitle">Quiz</h1>
   <p class="sub">Quiz em tempo real</p>
   <div class="input-group">
     <input type="text" id="nameInput" placeholder="Seu nome completo" maxlength="40" autocomplete="off" />
@@ -193,6 +193,8 @@
   }
 
   socket.on('connect', () => {
+    // Busca config logo ao conectar para mostrar nome do evento na tela de entrada
+    fetch('/api/config').then(r => r.json()).then(applyConfig).catch(() => {});
     // Sempre que conectar (inclusive após refresh), tenta rejoin se tiver nome salvo
     const name = localStorage.getItem('quiz_player_name');
     if (name) {
@@ -225,8 +227,19 @@
 
   socket.on('joined', (state) => {
     document.getElementById('lobbyName').textContent = myName;
+    applyConfig(state.config);
     applyState(state);
   });
+
+  socket.on('config', applyConfig);
+
+  function applyConfig(cfg) {
+    if (!cfg) return;
+    const name = cfg.eventName || 'Quiz';
+    const t = document.getElementById('joinTitle');
+    if (t) t.textContent = name;
+    document.title = name;
+  }
 
   socket.on('state', applyState);
 
@@ -249,13 +262,15 @@
     if (state.phase === 'selectQuiz' || state.phase === 'lobby') {
       if (myName) {
         document.getElementById('lobbyName').textContent = myName;
-        const subEl = document.querySelector('#screen-lobby p.sub');
-        const waitEl = document.querySelector('#screen-lobby p:last-of-type');
+        if (state.config) applyConfig(state.config);
+        const subEl = document.getElementById('lobbySubtitle');
+        const waitEl = document.getElementById('lobbyWait');
         if (state.phase === 'selectQuiz') {
           if (subEl) subEl.textContent = 'Você está dentro! ✅';
           if (waitEl) waitEl.textContent = 'Aguardando o apresentador selecionar o quiz…';
         } else {
-          if (subEl) subEl.textContent = state.activeQuiz ? `Quiz ${state.activeQuiz} ✅` : 'Você está dentro! ✅';
+          const qName = state.config?.quizNames?.[state.activeQuiz] || (state.activeQuiz ? `Quiz ${state.activeQuiz}` : '');
+          if (subEl) subEl.textContent = qName ? `${qName} ✅` : 'Você está dentro! ✅';
           if (waitEl) waitEl.textContent = 'Aguardando o início do quiz…';
         }
         show('screen-lobby');

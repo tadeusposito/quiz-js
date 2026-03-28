@@ -17,7 +17,33 @@ const PRESENTER_PIN = process.env.PRESENTER_PIN || '5678';
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, 'data');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const QUESTIONS_FILE = path.join(DATA_DIR, 'questions.json');
+const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+const DEFAULT_CONFIG = {
+  eventName: 'Quiz Interativo',
+  quizNames: { 1: 'Quiz 1', 2: 'Quiz 2', 3: 'Quiz 3', 4: 'Quiz 4', 5: 'Quiz 5' },
+};
+
+function loadConfig() {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const raw = fs.readFileSync(CONFIG_FILE, 'utf8');
+      const saved = JSON.parse(raw);
+      // Merge com defaults para garantir que todos os campos existem
+      return {
+        ...DEFAULT_CONFIG, ...saved,
+        quizNames: { ...DEFAULT_CONFIG.quizNames, ...(saved.quizNames || {}) }
+      };
+    }
+  } catch (e) { console.error('Erro ao carregar config.json:', e.message); }
+  return { ...DEFAULT_CONFIG, quizNames: { ...DEFAULT_CONFIG.quizNames } };
+}
+
+function saveConfig(cfg) {
+  try { fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf8'); }
+  catch (e) { console.error('Erro ao salvar config.json:', e.message); }
+}
 
 function loadQuestions() {
   try {
@@ -47,12 +73,13 @@ const uploadFields = upload.fields([{ name: 'media', maxCount: 1 }, { name: 'rev
 // ── Estado global ─────────────────────────────────────────────────────────────
 const state = {
   questions: loadQuestions(),
-  activeQuiz: null,          // null = nenhum quiz selecionado ainda | 1 | 2
-  activeQuestions: [],       // subconjunto filtrado de questions pelo activeQuiz
-  phase: 'selectQuiz',       // 'selectQuiz' | 'lobby' | 'question' | 'reveal' | 'finished' | 'ranking'
-  currentIndex: -1,          // índice dentro de activeQuestions
-  participants: {},          // playerId → { name, socketId, scores: {1:{score,totalMs}, 2:{score,totalMs}} }
-  answers: {},               // `${playerId}_${currentIndex}` → { optionIndex, ms, correct }
+  config: loadConfig(),
+  activeQuiz: null,
+  activeQuestions: [],
+  phase: 'selectQuiz',
+  currentIndex: -1,
+  participants: {},
+  answers: {},
   questionStartedAt: null,
 };
 
@@ -73,6 +100,26 @@ app.post('/api/auth', (req, res) => {
   if (role === 'admin' && pin === ADMIN_PIN) return res.json({ ok: true });
   if (role === 'presenter' && pin === PRESENTER_PIN) return res.json({ ok: true });
   res.status(401).json({ ok: false });
+});
+
+// Ler configuração (público — necessário para celulares e presenter)
+app.get('/api/config', (req, res) => res.json(state.config));
+
+// Salvar configuração (somente admin)
+app.post('/api/config', (req, res) => {
+  if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
+  const { eventName, quizNames } = req.body;
+  if (eventName !== undefined) state.config.eventName = String(eventName).trim() || DEFAULT_CONFIG.eventName;
+  if (quizNames) {
+    for (let i = 1; i <= 5; i++) {
+      if (quizNames[i] !== undefined) state.config.quizNames[i] = String(quizNames[i]).trim() || DEFAULT_CONFIG.quizNames[i];
+    }
+  }
+  saveConfig(state.config);
+  // Notifica todos com a nova config
+  io.emit('config', state.config);
+  io.to('presenter').emit('presenterState', presenterFullState());
+  res.json({ ok: true, config: state.config });
 });
 
 app.post('/api/questions', uploadFields, (req, res) => {
@@ -151,6 +198,7 @@ function buildPublicState() {
   return {
     phase: state.phase,
     activeQuiz: state.activeQuiz,
+    config: state.config,
     currentIndex: state.currentIndex,
     totalQuestions: state.activeQuestions.length,
     question: q ? {
@@ -207,7 +255,8 @@ io.on('connection', (socket) => {
     } else {
       state.participants[playerId] = {
         name: name.trim(), socketId: socket.id,
-        scores: { 1: { score: 0, totalMs: 0 }, 2: { score: 0, totalMs: 0 } }
+        scores: { 1: { score: 0, totalMs: 0 }, 2: { score: 0, totalMs: 0 },
+                  3: { score: 0, totalMs: 0 }, 4: { score: 0, totalMs: 0 }, 5: { score: 0, totalMs: 0 } }
       };
     }
     socket._playerId = playerId;
