@@ -119,6 +119,35 @@
 
   .empty-state { text-align: center; color: #3a62a0; padding: 30px; font-size: 15px; }
   .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 4px; }
+  /* Seção de cores */
+  .color-section { margin-top: 20px; }
+  .color-section-title {
+    font-size: 11px; color: #5a82b8; text-transform: uppercase;
+    letter-spacing: 1px; font-weight: 700; margin-bottom: 10px;
+    padding-bottom: 6px; border-bottom: 1px solid #1e3860;
+  }
+  .color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 4px; }
+  .color-field { display: flex; flex-direction: column; gap: 4px; }
+  .color-field label { font-size: 11px; color: #7a9cc8; margin-bottom: 0; font-weight: 600; }
+  .color-field input[type=text] {
+    margin-bottom: 0; padding: 8px 10px; font-size: 13px;
+    font-family: monospace; letter-spacing: 1px;
+  }
+  .color-preview-strip {
+    display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 4px;
+  }
+  .color-swatch {
+    width: 32px; height: 32px; border-radius: 6px;
+    border: 2px solid rgba(255,255,255,0.15); cursor: pointer;
+    transition: transform .1s;
+  }
+  .color-swatch:hover { transform: scale(1.15); }
+  .color-reset-btn {
+    padding: 7px 16px; font-size: 12px; border-radius: 8px;
+    border: 1px solid #1e3860; background: #0a1020; color: #7a9cc8;
+    cursor: pointer; transition: all .15s;
+  }
+  .color-reset-btn:hover { border-color: var(--azul-claro); color: #fff; }
   .config-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
   .config-save-btn { margin-top: 14px; }
   .quiz-name-field { display: flex; flex-direction: column; gap: 4px; }
@@ -174,6 +203,60 @@
       <div class="quiz-name-field" id="qnf4"><label>Quiz 4</label><input type="text" id="cfgQ4" placeholder="Quiz 4" maxlength="40" /></div>
       <div class="quiz-name-field" id="qnf5"><label>Quiz 5</label><input type="text" id="cfgQ5" placeholder="Quiz 5" maxlength="40" /></div>
     </div>
+    <!-- Aparência -->
+    <details class="color-section" id="colorDetails">
+      <summary style="cursor:pointer;font-size:14px;color:var(--dourado);font-weight:700;padding:8px 0;list-style:none;display:flex;align-items:center;gap:8px;">
+        🎨 Customização da aparência <span style="font-size:12px;font-weight:400;color:#5a82b8;">(opcional)</span>
+      </summary>
+      <div style="margin-top:16px;">
+
+        <div class="color-section-title">Geral</div>
+        <div class="color-grid">
+          <div class="color-field"><label>Fundo (bg)</label><input type="text" id="c_bg" maxlength="9" oninput="syncSwatch(this,'sw_bg')" /><canvas id="sw_bg" class="color-swatch" onclick="copyHex(this,'c_bg')"></canvas></div>
+          <div class="color-field"><label>Card / painéis</label><input type="text" id="c_card" maxlength="9" oninput="syncSwatch(this,'sw_card')" /><canvas id="sw_card" class="color-swatch" onclick="copyHex(this,'c_card')"></canvas></div>
+          <div class="color-field"><label>Texto geral</label><input type="text" id="c_text" maxlength="9" oninput="syncSwatch(this,'sw_text')" /><canvas id="sw_text" class="color-swatch" onclick="copyHex(this,'c_text')"></canvas></div>
+          <div class="color-field"><label>Destaque / acento</label><input type="text" id="c_accent" maxlength="9" oninput="syncSwatch(this,'sw_accent')" /><canvas id="sw_accent" class="color-swatch" onclick="copyHex(this,'c_accent')"></canvas></div>
+          <div class="color-field"><label>Botão Entrar (bg)</label><input type="text" id="c_btnBg" maxlength="9" oninput="syncSwatch(this,'sw_btnBg')" /><canvas id="sw_btnBg" class="color-swatch" onclick="copyHex(this,'c_btnBg')"></canvas></div>
+          <div class="color-field"><label>Botão Entrar (texto)</label><input type="text" id="c_btnText" maxlength="9" oninput="syncSwatch(this,'sw_btnText')" /><canvas id="sw_btnText" class="color-swatch" onclick="copyHex(this,'c_btnText')"></canvas></div>
+        </div>
+
+        <div class="color-section-title" style="margin-top:14px;">Pergunta</div>
+        <div class="color-grid">
+          <div class="color-field"><label>Card da pergunta (bg)</label><input type="text" id="c_promptBg" maxlength="9" oninput="syncSwatch(this,'sw_promptBg')" /><canvas id="sw_promptBg" class="color-swatch" onclick="copyHex(this,'c_promptBg')"></canvas></div>
+          <div class="color-field"><label>Texto da pergunta</label><input type="text" id="c_promptText" maxlength="9" oninput="syncSwatch(this,'sw_promptText')" /><canvas id="sw_promptText" class="color-swatch" onclick="copyHex(this,'c_promptText')"></canvas></div>
+        </div>
+
+        <div class="color-section-title" style="margin-top:14px;">Alternativas</div>
+        <div class="color-grid">
+          <div class="color-field"><label>Opção A (bg)</label><input type="text" id="c_opt0Bg" maxlength="9" oninput="syncSwatch(this,'sw_opt0Bg')" /><canvas id="sw_opt0Bg" class="color-swatch" onclick="copyHex(this,'c_opt0Bg')"></canvas></div>
+          <div class="color-field"><label>Opção A (borda)</label><input type="text" id="c_opt0Border" maxlength="9" oninput="syncSwatch(this,'sw_opt0Border')" /><canvas id="sw_opt0Border" class="color-swatch" onclick="copyHex(this,'c_opt0Border')"></canvas></div>
+          <div class="color-field"><label>Opção B (bg)</label><input type="text" id="c_opt1Bg" maxlength="9" oninput="syncSwatch(this,'sw_opt1Bg')" /><canvas id="sw_opt1Bg" class="color-swatch" onclick="copyHex(this,'c_opt1Bg')"></canvas></div>
+          <div class="color-field"><label>Opção B (borda)</label><input type="text" id="c_opt1Border" maxlength="9" oninput="syncSwatch(this,'sw_opt1Border')" /><canvas id="sw_opt1Border" class="color-swatch" onclick="copyHex(this,'c_opt1Border')"></canvas></div>
+          <div class="color-field"><label>Opção C (bg)</label><input type="text" id="c_opt2Bg" maxlength="9" oninput="syncSwatch(this,'sw_opt2Bg')" /><canvas id="sw_opt2Bg" class="color-swatch" onclick="copyHex(this,'c_opt2Bg')"></canvas></div>
+          <div class="color-field"><label>Opção C (borda)</label><input type="text" id="c_opt2Border" maxlength="9" oninput="syncSwatch(this,'sw_opt2Border')" /><canvas id="sw_opt2Border" class="color-swatch" onclick="copyHex(this,'c_opt2Border')"></canvas></div>
+          <div class="color-field"><label>Opção D (bg)</label><input type="text" id="c_opt3Bg" maxlength="9" oninput="syncSwatch(this,'sw_opt3Bg')" /><canvas id="sw_opt3Bg" class="color-swatch" onclick="copyHex(this,'c_opt3Bg')"></canvas></div>
+          <div class="color-field"><label>Opção D (borda)</label><input type="text" id="c_opt3Border" maxlength="9" oninput="syncSwatch(this,'sw_opt3Border')" /><canvas id="sw_opt3Border" class="color-swatch" onclick="copyHex(this,'c_opt3Border')"></canvas></div>
+          <div class="color-field"><label>Texto das opções</label><input type="text" id="c_optText" maxlength="9" oninput="syncSwatch(this,'sw_optText')" /><canvas id="sw_optText" class="color-swatch" onclick="copyHex(this,'c_optText')"></canvas></div>
+        </div>
+
+        <div class="color-section-title" style="margin-top:14px;">Acerto / Erro / Sem resposta</div>
+        <div class="color-grid">
+          <div class="color-field"><label>Acerto (bg)</label><input type="text" id="c_correctBg" maxlength="9" oninput="syncSwatch(this,'sw_correctBg')" /><canvas id="sw_correctBg" class="color-swatch" onclick="copyHex(this,'c_correctBg')"></canvas></div>
+          <div class="color-field"><label>Acerto (borda)</label><input type="text" id="c_correctBorder" maxlength="9" oninput="syncSwatch(this,'sw_correctBorder')" /><canvas id="sw_correctBorder" class="color-swatch" onclick="copyHex(this,'c_correctBorder')"></canvas></div>
+          <div class="color-field"><label>Acerto (texto)</label><input type="text" id="c_correctText" maxlength="9" oninput="syncSwatch(this,'sw_correctText')" /><canvas id="sw_correctText" class="color-swatch" onclick="copyHex(this,'c_correctText')"></canvas></div>
+          <div class="color-field"><label>Erro (bg)</label><input type="text" id="c_wrongBg" maxlength="9" oninput="syncSwatch(this,'sw_wrongBg')" /><canvas id="sw_wrongBg" class="color-swatch" onclick="copyHex(this,'c_wrongBg')"></canvas></div>
+          <div class="color-field"><label>Erro (borda)</label><input type="text" id="c_wrongBorder" maxlength="9" oninput="syncSwatch(this,'sw_wrongBorder')" /><canvas id="sw_wrongBorder" class="color-swatch" onclick="copyHex(this,'c_wrongBorder')"></canvas></div>
+          <div class="color-field"><label>Erro (texto)</label><input type="text" id="c_wrongText" maxlength="9" oninput="syncSwatch(this,'sw_wrongText')" /><canvas id="sw_wrongText" class="color-swatch" onclick="copyHex(this,'c_wrongText')"></canvas></div>
+          <div class="color-field"><label>Sem resposta (bg)</label><input type="text" id="c_missedBg" maxlength="9" oninput="syncSwatch(this,'sw_missedBg')" /><canvas id="sw_missedBg" class="color-swatch" onclick="copyHex(this,'c_missedBg')"></canvas></div>
+          <div class="color-field"><label>Sem resposta (texto)</label><input type="text" id="c_missedText" maxlength="9" oninput="syncSwatch(this,'sw_missedText')" /><canvas id="sw_missedText" class="color-swatch" onclick="copyHex(this,'c_missedText')"></canvas></div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <button class="color-reset-btn" onclick="resetColors()">↺ Restaurar cores padrão</button>
+        </div>
+      </div>
+    </details>
+
     <div class="config-save-btn">
       <button class="btn btn-primary" onclick="saveConfig()">💾 Salvar Configurações</button>
     </div>
@@ -259,8 +342,9 @@
       const el = document.getElementById(`cfgQ${i}`);
       if (el) el.value = eventConfig.quizNames?.[i] || `Quiz ${i}`;
     }
+    fillColorFields(eventConfig.colors);
     updateFormQuizLabels();
-    renderList(); // re-renderiza com nomes atualizados
+    renderList();
   }
 
   function updateFormQuizLabels() {
@@ -268,6 +352,55 @@
       const btn = document.getElementById(`formQuiz${i}`);
       if (btn) btn.textContent = eventConfig.quizNames?.[i] || `Quiz ${i}`;
     }
+  }
+
+  // ── Cores ─────────────────────────────────────────────────────────────────
+  const COLOR_DEFAULTS = {
+    bg:'#0d1520', card:'#101c30', text:'#f0f0f0', accent:'#c8a84b',
+    promptBg:'#101c30', promptText:'#f0f0f0',
+    opt0Bg:'#1a3a7a', opt0Border:'#2a5abf',
+    opt1Bg:'#7a1a1a', opt1Border:'#bf2a2a',
+    opt2Bg:'#1a5a2a', opt2Border:'#2abf5a',
+    opt3Bg:'#5a4a1a', opt3Border:'#bfa02a',
+    optText:'#ffffff',
+    correctBg:'#145214', correctBorder:'#4caf50', correctText:'#4caf50',
+    wrongBg:'#521414',   wrongBorder:'#f44336',   wrongText:'#f44336',
+    missedBg:'#3a3a1a',  missedText:'#ffc107',
+    btnBg:'#1e5dbf',     btnText:'#ffffff',
+  };
+
+  function syncSwatch(input, swId) {
+    const val = input.value.trim();
+    const sw = document.getElementById(swId);
+    if (!sw) return;
+    const ctx = sw.getContext('2d');
+    ctx.clearRect(0,0,sw.width,sw.height);
+    if (/^#[0-9a-fA-F]{3,8}$/.test(val)) {
+      ctx.fillStyle = val;
+      ctx.fillRect(0,0,sw.width,sw.height);
+    }
+  }
+
+  function fillColorFields(colors) {
+    const c = { ...COLOR_DEFAULTS, ...(colors || {}) };
+    Object.keys(COLOR_DEFAULTS).forEach(k => {
+      const inp = document.getElementById(`c_${k}`);
+      if (inp) { inp.value = c[k] || ''; syncSwatch(inp, `sw_${k}`); }
+    });
+  }
+
+  function resetColors() {
+    if (!confirm('Restaurar todas as cores para o padrão?')) return;
+    fillColorFields(COLOR_DEFAULTS);
+  }
+
+  function collectColors() {
+    const out = {};
+    Object.keys(COLOR_DEFAULTS).forEach(k => {
+      const inp = document.getElementById(`c_${k}`);
+      if (inp) out[k] = inp.value.trim() || COLOR_DEFAULTS[k];
+    });
+    return out;
   }
 
   async function saveConfig() {
@@ -279,6 +412,7 @@
       pin: adminPin,
       eventName: document.getElementById('cfgEventName').value.trim(),
       quizNames,
+      colors: collectColors(),
     };
     const r = await fetch('/api/config', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -286,6 +420,7 @@
     const d = await r.json();
     if (d.ok) {
       eventConfig = d.config;
+      fillColorFields(eventConfig.colors);
       updateFormQuizLabels();
       renderList();
       showStatus('cfgStatus', '✅ Configurações salvas!', true);

@@ -23,6 +23,28 @@ fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 const DEFAULT_CONFIG = {
   eventName: 'Quiz Interativo',
   quizNames: { 1: 'Quiz 1', 2: 'Quiz 2', 3: 'Quiz 3', 4: 'Quiz 4', 5: 'Quiz 5' },
+  colors: {
+    // Geral
+    bg:          '#0d1520',
+    card:        '#101c30',
+    text:        '#f0f0f0',
+    accent:      '#c8a84b',
+    // Pergunta
+    promptBg:    '#101c30',
+    promptText:  '#f0f0f0',
+    // Opções (bg e borda)
+    opt0Bg:      '#1a3a7a', opt0Border: '#2a5abf',
+    opt1Bg:      '#7a1a1a', opt1Border: '#bf2a2a',
+    opt2Bg:      '#1a5a2a', opt2Border: '#2abf5a',
+    opt3Bg:      '#5a4a1a', opt3Border: '#bfa02a',
+    optText:     '#ffffff',
+    // Acerto / Erro / Sem resposta
+    correctBg:   '#145214', correctBorder: '#4caf50', correctText: '#4caf50',
+    wrongBg:     '#521414', wrongBorder:   '#f44336', wrongText:   '#f44336',
+    missedBg:    '#3a3a1a', missedText:    '#ffc107',
+    // Botão de entrar
+    btnBg:       '#1e5dbf', btnText:       '#ffffff',
+  }
 };
 
 function loadConfig() {
@@ -33,7 +55,8 @@ function loadConfig() {
       // Merge com defaults para garantir que todos os campos existem
       return {
         ...DEFAULT_CONFIG, ...saved,
-        quizNames: { ...DEFAULT_CONFIG.quizNames, ...(saved.quizNames || {}) }
+        quizNames: { ...DEFAULT_CONFIG.quizNames, ...(saved.quizNames || {}) },
+        colors: { ...DEFAULT_CONFIG.colors, ...(saved.colors || {}) }
       };
     }
   } catch (e) { console.error('Erro ao carregar config.json:', e.message); }
@@ -108,11 +131,21 @@ app.get('/api/config', (req, res) => res.json(state.config));
 // Salvar configuração (somente admin)
 app.post('/api/config', (req, res) => {
   if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
-  const { eventName, quizNames } = req.body;
+  const { eventName, quizNames, colors } = req.body;
   if (eventName !== undefined) state.config.eventName = String(eventName).trim() || DEFAULT_CONFIG.eventName;
   if (quizNames) {
     for (let i = 1; i <= 5; i++) {
       if (quizNames[i] !== undefined) state.config.quizNames[i] = String(quizNames[i]).trim() || DEFAULT_CONFIG.quizNames[i];
+    }
+  }
+  if (colors) {
+    const validKeys = Object.keys(DEFAULT_CONFIG.colors);
+    for (const k of validKeys) {
+      if (colors[k] !== undefined) {
+        const val = String(colors[k]).trim();
+        // Aceita só hex válido (#xxx ou #xxxxxx)
+        if (/^#[0-9a-fA-F]{3,8}$/.test(val)) state.config.colors[k] = val;
+      }
     }
   }
   saveConfig(state.config);
