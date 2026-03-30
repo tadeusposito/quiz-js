@@ -148,6 +148,15 @@
     cursor: pointer; transition: all .15s;
   }
   .color-reset-btn:hover { border-color: var(--azul-claro); color: #fff; }
+  .preset-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .preset-btn {
+    padding: 8px 16px; font-size: 12px; font-weight: 700; border-radius: 8px;
+    border: 2px solid transparent; cursor: pointer; transition: all .15s;
+  }
+  .preset-btn:hover { filter: brightness(1.15); transform: scale(1.03); }
+  .preset-js   { background: #1a2a5e; color: #f97316; border-color: #f97316; }
+  .preset-liv  { background: #0d1e3d; color: #d4af6a; border-color: #d4af6a; }
+  .preset-neu  { background: #1a1a2e; color: #00bcd4; border-color: #00bcd4; }
   .config-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
   .config-save-btn { margin-top: 14px; }
   .quiz-name-field { display: flex; flex-direction: column; gap: 4px; }
@@ -240,10 +249,18 @@
       <option value="Barlow">Barlow</option>
     </select>
 
+    <!-- Presets -->
+    <label style="margin-top:4px;">Presets de aparência</label>
+    <div class="preset-btns">
+      <button class="preset-btn preset-js"  onclick="applyPreset('jovensenador')">🟠 Jovem Senador</button>
+      <button class="preset-btn preset-liv" onclick="applyPreset('livraria')">📘 Livraria do Senado</button>
+      <button class="preset-btn preset-neu" onclick="applyPreset('neutro')">⬛ Neutro</button>
+    </div>
+
     <!-- Aparência -->
     <details class="color-section" id="colorDetails">
       <summary style="cursor:pointer;font-size:14px;color:var(--dourado);font-weight:700;padding:8px 0;list-style:none;display:flex;align-items:center;gap:8px;">
-        🎨 Customização da aparência <span style="font-size:12px;font-weight:400;color:#5a82b8;">(opcional)</span>
+        🎨 Customização da aparência <span style="font-size:12px;font-weight:400;color:#5a82b8;">(opcional — presets já preenchem os campos)</span>
       </summary>
       <div style="margin-top:16px;">
 
@@ -323,7 +340,8 @@
 
     <label>Quiz</label>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;" id="formQuizBtns">
-      <button type="button" class="quiz-badge quiz-badge-1" id="formQuiz1" onclick="setFormQuiz(1)" style="border-width:3px;"></button>
+      <button type="button" class="quiz-badge" id="formQuizNull" onclick="setFormQuiz(null)" style="border-width:3px;background:#1a1a2a;color:#8a9cc8;border-color:#4a5a80;">📦 Banco</button>
+      <button type="button" class="quiz-badge quiz-badge-1" id="formQuiz1" onclick="setFormQuiz(1)" style="border-width:2px;"></button>
       <button type="button" class="quiz-badge quiz-badge-2" id="formQuiz2" onclick="setFormQuiz(2)"></button>
       <button type="button" class="quiz-badge quiz-badge-3" id="formQuiz3" onclick="setFormQuiz(3)"></button>
       <button type="button" class="quiz-badge quiz-badge-4" id="formQuiz4" onclick="setFormQuiz(4)"></button>
@@ -366,7 +384,7 @@
   let correctIndex = 0;
   let selectedFile = null;
   let selectedRevealFile = null;
-  let currentQuizId = 1;
+  let currentQuizId = null; // null = banco (sem quiz associado)
 
   let eventConfig = { eventName: '', quizNames: {1:'Quiz 1',2:'Quiz 2',3:'Quiz 3',4:'Quiz 4',5:'Quiz 5'} };
 
@@ -400,6 +418,9 @@
       const btn = document.getElementById(`formQuiz${i}`);
       if (btn) btn.textContent = eventConfig.quizNames?.[i] || `Quiz ${i}`;
     }
+    // Banco sempre fixo
+    const nullBtn = document.getElementById('formQuizNull');
+    if (nullBtn) nullBtn.textContent = '📦 Banco';
   }
 
   // ── Logo ──────────────────────────────────────────────────────────────────
@@ -483,6 +504,86 @@
     });
   }
 
+  const PRESETS = {
+    jovensenador: {
+      name: 'Jovem Senador',
+      font: 'Oswald',
+      colors: {
+        bg:           '#0e1628',
+        card:         '#1a2a4a',
+        text:         '#ffffff',
+        accent:       '#f97316',
+        promptBg:     '#1a2a5e',
+        promptText:   '#ffffff',
+        opt0Bg:       '#1a2a5e', opt0Border: '#f97316',
+        opt1Bg:       '#7a1a00', opt1Border: '#f97316',
+        opt2Bg:       '#1a4a1a', opt2Border: '#f97316',
+        opt3Bg:       '#4a2a00', opt3Border: '#f97316',
+        optText:      '#ffffff',
+        correctBg:    '#1a4a1a', correctBorder: '#4caf50', correctText: '#ffffff',
+        wrongBg:      '#5a1a1a', wrongBorder:   '#f44336', wrongText:   '#ffffff',
+        missedBg:     '#3a2a00', missedText:    '#f97316',
+        btnBg:        '#f97316', btnText:       '#ffffff',
+      }
+    },
+    livraria: {
+      name: 'Livraria do Senado',
+      font: 'Lato',
+      colors: {
+        bg:           '#0d1e3d',
+        card:         '#122448',
+        text:         '#f0ece4',
+        accent:       '#d4af6a',
+        promptBg:     '#0a1830',
+        promptText:   '#f0ece4',
+        opt0Bg:       '#0d2145', opt0Border: '#d4af6a',
+        opt1Bg:       '#0d2145', opt1Border: '#d4af6a',
+        opt2Bg:       '#0d2145', opt2Border: '#d4af6a',
+        opt3Bg:       '#0d2145', opt3Border: '#d4af6a',
+        optText:      '#f0ece4',
+        correctBg:    '#0a3020', correctBorder: '#6ab04c', correctText: '#c8f5b0',
+        wrongBg:      '#3d1020', wrongBorder:   '#c0392b', wrongText:   '#f5c0b0',
+        missedBg:     '#2a2010', missedText:    '#d4af6a',
+        btnBg:        '#d4af6a', btnText:       '#0d1e3d',
+      }
+    },
+    neutro: {
+      name: 'Neutro',
+      font: 'Inter',
+      colors: {
+        bg:           '#111827',
+        card:         '#1f2937',
+        text:         '#f9fafb',
+        accent:       '#00bcd4',
+        promptBg:     '#1f2937',
+        promptText:   '#f9fafb',
+        opt0Bg:       '#1e3a5f', opt0Border: '#3b82f6',
+        opt1Bg:       '#5f1e1e', opt1Border: '#ef4444',
+        opt2Bg:       '#1e4a2a', opt2Border: '#22c55e',
+        opt3Bg:       '#4a3a1e', opt3Border: '#f59e0b',
+        optText:      '#ffffff',
+        correctBg:    '#14532d', correctBorder: '#22c55e', correctText: '#86efac',
+        wrongBg:      '#7f1d1d', wrongBorder:   '#ef4444', wrongText:   '#fca5a5',
+        missedBg:     '#374151', missedText:    '#f59e0b',
+        btnBg:        '#00bcd4', btnText:       '#111827',
+      }
+    },
+  };
+
+  function applyPreset(key) {
+    const p = PRESETS[key];
+    if (!p) return;
+    // Preenche campos de cor
+    fillColorFields(p.colors);
+    // Aplica fonte
+    const fontSel = document.getElementById('cfgFont');
+    if (fontSel) { fontSel.value = p.font; previewFont(p.font); }
+    // Abre a seção de aparência pra o usuário ver o que foi preenchido
+    const details = document.getElementById('colorDetails');
+    if (details) details.open = true;
+    showStatus('cfgStatus', `✅ Preset "${p.name}" aplicado — revise e salve.`, true);
+  }
+
   function resetColors() {
     if (!confirm('Restaurar todas as cores para o padrão?')) return;
     fillColorFields(COLOR_DEFAULTS);
@@ -535,8 +636,11 @@
 
   function setFormQuiz(id) {
     currentQuizId = id;
+    const nullBtn = document.getElementById('formQuizNull');
+    if (nullBtn) nullBtn.style.borderWidth = id === null ? '3px' : '2px';
     for (let i = 1; i <= 5; i++) {
-      document.getElementById(`formQuiz${i}`).style.borderWidth = id === i ? '3px' : '2px';
+      const btn = document.getElementById(`formQuiz${i}`);
+      if (btn) btn.style.borderWidth = id === i ? '3px' : '2px';
     }
   }
 
@@ -659,7 +763,7 @@
     fd.append('prompt', prompt);
     fd.append('options', JSON.stringify(options));
     fd.append('correctIndex', cidx);
-    fd.append('quizId', currentQuizId || 1);
+    fd.append('quizId', currentQuizId === null ? '' : currentQuizId);
     if (selectedFile) fd.append('media', selectedFile);
     if (selectedRevealFile) fd.append('revealMedia', selectedRevealFile);
 
@@ -697,7 +801,10 @@
   }
 
   async function toggleQuiz(id, currentQuizId) {
-    const newQuizId = currentQuizId === 1 ? 2 : 1;
+    // Ciclo: null → 1 → 2 → 3 → 4 → 5 → null
+    const cycle = [null, 1, 2, 3, 4, 5];
+    const idx = cycle.indexOf(currentQuizId);
+    const newQuizId = cycle[(idx + 1) % cycle.length];
     await fetch(`/api/questions/${id}/quiz`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -712,18 +819,21 @@
       list.innerHTML = '<div class="empty-state">Nenhuma questão cadastrada ainda.</div>';
       return;
     }
-    const q1 = questions.filter(q => (q.quizId || 1) === 1).length;
-    const q2 = questions.filter(q => (q.quizId || 1) === 2).length;
+    const bankCount = questions.filter(q => q.quizId === null || q.quizId === undefined).length;
     const qCounts = [1,2,3,4,5].map(i => ({
       id: i,
       name: eventConfig.quizNames?.[i] || `Quiz ${i}`,
-      count: questions.filter(q => (q.quizId||1) === i).length
+      count: questions.filter(q => q.quizId === i).length
     })).filter(x => x.count > 0);
 
+    const summaryParts = [];
+    if (bankCount > 0) summaryParts.push(`<span>📦 Banco: <strong style="color:#fff">${bankCount}</strong> ${bankCount!==1?'questões':'questão'}</span>`);
+    qCounts.forEach(x => summaryParts.push(`<span>${x.id} – <em>${x.name}</em>: <strong style="color:#fff">${x.count}</strong> ${x.count!==1?'questões':'questão'}</span>`));
+
     list.innerHTML = `<div style="margin-bottom:12px;font-size:13px;color:#5a82b8;display:flex;flex-wrap:wrap;gap:12px;">
-      ${qCounts.map(x => `<span>Quiz ${x.id} – <em>${x.name}</em>: <strong style="color:#fff">${x.count}</strong> ${x.count!==1?'questões':'questão'}</span>`).join(' | ')}
+      ${summaryParts.join(' | ')}
     </div>` + questions.map((q, i) => {
-      const qid = q.quizId || 1;
+      const qid = (q.quizId === null || q.quizId === undefined) ? null : q.quizId;
       const opts = q.options.map(o =>
         `<span class="${o.correct ? 'correct' : ''}">${o.label}${o.correct ? ' ✅' : ''}</span>`
       ).join(' · ');
@@ -736,8 +846,10 @@
             <div class="q-opts">${opts}</div>
           </div>
           <div class="q-actions">
-            <button class="quiz-badge quiz-badge-${qid}" onclick="toggleQuiz('${q.id}', ${qid})" title="Mover para outro quiz">
-              ${eventConfig.quizNames?.[qid] || 'Quiz ' + qid}
+            <button class="${qid === null ? 'quiz-badge' : `quiz-badge quiz-badge-\${qid}`}"
+              style="${qid === null ? 'background:#1a1a2a;color:#8a9cc8;border-color:#4a5a80;' : ''}"
+              onclick="toggleQuiz('${q.id}', ${JSON.stringify(qid)})" title="Clique para mover para outro quiz">
+              ${qid === null ? '📦 Banco' : (eventConfig.quizNames?.[qid] || 'Quiz ' + qid)}
             </button>
             <button class="btn-up" onclick="moveQ(${i}, -1)" ${i === 0 ? 'disabled' : ''}>▲</button>
             <button class="btn-dn" onclick="moveQ(${i}, 1)" ${i === questions.length - 1 ? 'disabled' : ''}>▼</button>

@@ -76,8 +76,8 @@ function loadQuestions() {
     if (fs.existsSync(QUESTIONS_FILE)) {
       const raw = fs.readFileSync(QUESTIONS_FILE, 'utf8');
       const qs = JSON.parse(raw);
-      // Migração: questões antigas sem quizId recebem quizId 1
-      return qs.map(q => ({ quizId: 1, ...q }));
+      // Migração: questões antigas sem quizId explícito vão pro banco (null)
+      return qs.map(q => q.hasOwnProperty('quizId') ? q : { ...q, quizId: null });
     }
   } catch (e) { console.error('Erro ao carregar questions.json:', e.message); }
   return [];
@@ -169,7 +169,7 @@ app.post('/api/questions', uploadFields, (req, res) => {
   const revealFile = req.files?.revealMedia?.[0];
   const q = {
     id: Date.now().toString(),
-    quizId: parseInt(quizId || '1', 10),
+    quizId: (quizId === '0' || quizId === undefined || quizId === null || quizId === '') ? null : parseInt(quizId, 10),
     mediaType: mediaFile ? (mediaFile.mimetype.startsWith('video') ? 'video' : 'image') : null,
     mediaUrl: mediaFile ? `/uploads/${mediaFile.filename}` : null,
     revealMediaType: revealFile ? (revealFile.mimetype.startsWith('video') ? 'video' : 'image') : null,
