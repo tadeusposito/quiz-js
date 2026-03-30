@@ -402,6 +402,7 @@
       if (el) el.textContent = cfg.eventName;
       document.title = cfg.eventName;
     }
+    if (cfg.colors) applyColors(cfg.colors);
     if (cfg.font) applyFont(cfg.font);
   }).catch(() => {});
 
@@ -444,7 +445,47 @@
     document.body.style.fontFamily = `'${font}', system-ui, sans-serif`;
   }
 
+  function applyColors(c) {
+    if (!c) return;
+    let el = document.getElementById('custom-colors');
+    if (!el) { el = document.createElement('style'); el.id = 'custom-colors'; document.head.appendChild(el); }
+    // Mapeia config colors → variáveis CSS do presenter
+    el.textContent = `
+      :root {
+        --bg:        ${c.bg};
+        --card:      ${c.card};
+        --text:      ${c.text};
+        --dourado:   ${c.accent};
+        --azul:      ${c.btnBg};
+        --azul-claro:${c.btnBg};
+        --border:    ${c.btnBg};
+      }
+      body { background: ${c.bg}; color: ${c.text}; }
+      .opt-c-0 { background: ${c.opt0Bg} !important; border-left: 6px solid ${c.opt0Border} !important; }
+      .opt-c-1 { background: ${c.opt1Bg} !important; border-left: 6px solid ${c.opt1Border} !important; }
+      .opt-c-2 { background: ${c.opt2Bg} !important; border-left: 6px solid ${c.opt2Border} !important; }
+      .opt-c-3 { background: ${c.opt3Bg} !important; border-left: 6px solid ${c.opt3Border} !important; }
+      .opt-card { color: ${c.optText} !important; }
+      .opt-card.correct { background: ${c.correctBg} !important; border-color: ${c.correctBorder} !important; }
+      .opt-card.wrong   { background: ${c.wrongBg}   !important; border-color: ${c.wrongBorder}   !important; opacity: 0.6; }
+      .header { background: linear-gradient(90deg, ${c.bg} 0%, ${c.card} 100%); border-bottom: 2px solid ${c.btnBg}; }
+      .controls-panel { background: ${c.bg}; border-left: 1px solid ${c.card}; }
+      .content-area { background: ${c.bg}; }
+      .rank-row { background: ${c.card}; border-color: ${c.btnBg}; }
+      .rank-row.top { border-color: ${c.accent}; }
+      .rank-pts-big { color: ${c.accent}; }
+      .q-prompt-big { color: ${c.text}; }
+      .stat-pill { background: ${c.card}; border-color: ${c.btnBg}; }
+      #pin-screen { background: ${c.bg}; }
+      #pin-screen input { border-color: ${c.btnBg}; background: ${c.card}; }
+      #pin-screen button { background: ${c.btnBg}; }
+      .quiz-btn-count { color: ${c.text}; opacity: .75; }
+    `;
+  }
+
   socket.on('config', (cfg) => {
+    if (cfg.colors) applyColors(cfg.colors);
+    if (cfg.font) applyFont(cfg.font);
     if (currentState) {
       currentState.config = cfg;
       applyState(currentState);
@@ -478,7 +519,7 @@
     document.getElementById('hdrPhase').textContent = (phaseNames[state.phase] || state.phase) + quizLabel;
     document.getElementById('phaseLabel').textContent = (phaseNames[state.phase] || state.phase) + quizLabel;
 
-    // Nomes do evento, logo e fonte
+    // Nomes do evento, logo, fonte e cores
     if (state.config) {
       const eName = state.config.eventName || 'Quiz Interativo';
       const hdr = document.getElementById('headerEventName');
@@ -486,6 +527,7 @@
       if (hdr) hdr.textContent = eName;
       if (sel) sel.textContent = eName;
       document.title = eName;
+      if (state.config.colors) applyColors(state.config.colors);
       // Logo
       const logoEl = document.getElementById('headerLogo');
       if (logoEl) {
