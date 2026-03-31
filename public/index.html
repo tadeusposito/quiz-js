@@ -132,6 +132,19 @@
   .rank-score { font-size: 14px; color: var(--accent); text-align: right; }
   .rank-pts { font-size: 16px; font-weight: 700; color: var(--accent); }
 
+  /* Resposta aberta */
+  .open-answer-area { display: flex; flex-direction: column; gap: 12px; }
+  .open-answer-area textarea {
+    padding: 16px; font-size: 16px; border-radius: 14px;
+    border: 2px solid var(--btn-bg); background: var(--card);
+    color: var(--text); outline: none; resize: none;
+    width: 100%; min-height: 100px; line-height: 1.5;
+    transition: border-color .2s; font-family: inherit;
+  }
+  .open-answer-area textarea:focus { border-color: var(--accent); }
+  .open-answer-area textarea:disabled { opacity: 0.6; cursor: not-allowed; }
+  .char-count { font-size: 12px; color: var(--accent); text-align: right; opacity: .7; }
+
   .hidden { display: none !important; }
 </style>
 </head>
@@ -295,6 +308,7 @@
     localStorage.removeItem('quiz_player_id');
     myName = '';
     myAnswer = null;
+    myOpenText = null;
     renderQuestion._lastIndex = -1;
     document.getElementById('nameInput').value = '';
     document.getElementById('joinBtn').disabled = false;
@@ -350,9 +364,9 @@
     const q = state.question;
     const qIdx = state.currentIndex;
 
-    // Se mudou de questão, reseta resposta
     if (renderQuestion._lastIndex !== qIdx) {
       myAnswer = null;
+      myOpenText = null;
       renderQuestion._lastIndex = qIdx;
       document.getElementById('ackMsg').classList.add('hidden');
       document.getElementById('revealBadge').innerHTML = '';
@@ -363,25 +377,56 @@
 
     const container = document.getElementById('optionsContainer');
     container.innerHTML = '';
+
+    if (q.type === 'open') {
+      // ── Questão aberta ──────────────────────────────────────────────────
+      const submitted = myOpenText !== null;
+      container.innerHTML = `
+        <div class="open-answer-area">
+          <textarea id="openInput" maxlength="300" placeholder="Digite sua resposta…"
+            ${submitted || state.phase === 'reveal' ? 'disabled' : ''}
+          >${submitted ? myOpenText : ''}</textarea>
+          <div class="char-count" id="charCount">${submitted ? myOpenText.length : 0}/300</div>
+          <button class="btn-primary" id="openSubmitBtn"
+            onclick="sendOpenAnswer()"
+            ${submitted || state.phase === 'reveal' ? 'disabled' : ''}>
+            ${submitted ? '✅ Enviado' : 'Enviar resposta'}
+          </button>
+        </div>`;
+
+      if (!submitted && state.phase !== 'reveal') {
+        const ta = document.getElementById('openInput');
+        if (ta) ta.addEventListener('input', () => {
+          const cc = document.getElementById('charCount');
+          if (cc) cc.textContent = `${ta.value.length}/300`;
+        });
+      }
+
+      if (state.phase === 'reveal') {
+        document.getElementById('revealBadge').innerHTML =
+          `<div class="reveal-badge reveal-missed" style="background:var(--card);color:var(--accent);">
+            📋 Respostas exibidas no telão
+          </div>`;
+      }
+      return;
+    }
+
+    // ── Múltipla escolha ──────────────────────────────────────────────────
     q.optionLabels.forEach((label, i) => {
       const btn = document.createElement('button');
       btn.className = `opt-btn opt-${i}`;
       btn.textContent = label;
-
       if (myAnswer !== null) btn.disabled = true;
       if (myAnswer === i) btn.classList.add('opt-selected');
-
       if (state.phase === 'reveal' && q.correctIndex !== null) {
         btn.disabled = true;
         if (i === q.correctIndex) btn.classList.add('opt-correct');
         else if (i === myAnswer && myAnswer !== q.correctIndex) btn.classList.add('opt-wrong');
       }
-
       btn.onclick = () => sendAnswer(i);
       container.appendChild(btn);
     });
 
-    // Badge de reveal
     if (state.phase === 'reveal' && myAnswer !== null) {
       const correct = myAnswer === q.correctIndex;
       document.getElementById('revealBadge').innerHTML =
@@ -401,11 +446,24 @@
     socket.emit('answer', { optionIndex });
     document.getElementById('ackMsg').textContent = '✅ Resposta registrada!';
     document.getElementById('ackMsg').classList.remove('hidden');
-    // Bloqueia botões
     document.querySelectorAll('.opt-btn').forEach((btn, i) => {
       btn.disabled = true;
       if (i === optionIndex) btn.classList.add('opt-selected');
     });
+  }
+
+  function sendOpenAnswer() {
+    const ta = document.getElementById('openInput');
+    if (!ta || myOpenText !== null) return;
+    const text = ta.value.trim();
+    if (!text) return;
+    myOpenText = text;
+    socket.emit('answerOpen', { text });
+    ta.disabled = true;
+    const btn = document.getElementById('openSubmitBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '✅ Enviado'; }
+    document.getElementById('ackMsg').textContent = '✅ Resposta enviada!';
+    document.getElementById('ackMsg').classList.remove('hidden');
   }
 
   function renderRanking(ranking) {

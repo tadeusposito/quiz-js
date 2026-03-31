@@ -164,18 +164,20 @@ app.post('/api/config', (req, res) => {
 
 app.post('/api/questions', uploadFields, (req, res) => {
   if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
-  const { prompt, options, correctIndex, quizId } = req.body;
+  const { prompt, options, correctIndex, quizId, type } = req.body;
   const mediaFile = req.files?.media?.[0];
   const revealFile = req.files?.revealMedia?.[0];
+  const qType = type === 'open' ? 'open' : 'multiple';
   const q = {
     id: Date.now().toString(),
+    type: qType,
     quizId: (quizId === '0' || quizId === undefined || quizId === null || quizId === '') ? null : parseInt(quizId, 10),
     mediaType: mediaFile ? (mediaFile.mimetype.startsWith('video') ? 'video' : 'image') : null,
     mediaUrl: mediaFile ? `/uploads/${mediaFile.filename}` : null,
     revealMediaType: revealFile ? (revealFile.mimetype.startsWith('video') ? 'video' : 'image') : null,
     revealMediaUrl: revealFile ? `/uploads/${revealFile.filename}` : null,
     prompt,
-    options: JSON.parse(options).map((label, i) => ({ label, correct: i === parseInt(correctIndex, 10) })),
+    options: qType === 'open' ? [] : JSON.parse(options || '[]').map((label, i) => ({ label, correct: i === parseInt(correctIndex, 10) })),
   };
   state.questions.push(q);
   saveQuestions(state.questions);
@@ -272,13 +274,14 @@ function buildPublicState() {
     totalQuestions: state.activeQuestions.length,
     question: q ? {
       id: q.id,
+      type: q.type || 'multiple',
       mediaType: q.mediaType,
       mediaUrl: q.mediaUrl,
       revealMediaType: state.phase === 'reveal' ? (q.revealMediaType || null) : null,
       revealMediaUrl: state.phase === 'reveal' ? (q.revealMediaUrl || null) : null,
       prompt: q.prompt,
-      optionLabels: q.options.map(o => o.label),
-      correctIndex: state.phase === 'reveal' ? q.options.findIndex(o => o.correct) : null,
+      optionLabels: (q.type === 'open') ? [] : q.options.map(o => o.label),
+      correctIndex: (q.type === 'open' || state.phase !== 'reveal') ? null : q.options.findIndex(o => o.correct),
     } : null,
     participantCount: Object.keys(state.participants).length,
   };
@@ -299,6 +302,26 @@ function buildRanking() {
 function buildPresenterExtra() {
   if (state.currentIndex < 0 || !state.activeQuestions[state.currentIndex]) return {};
   const q = state.activeQuestions[state.currentIndex];
+  const participantCount = Object.keys(state.participants).length;
+
+  if (q.type === 'open') {
+    // Para questão aberta: retornar lista de respostas com nomes
+    const openAnswers = [];
+    const qid = state.activeQuiz || 1;
+    Object.entries(state.answers).forEach(([key, ans]) => {
+      if (key.endsWith(`_${state.currentIndex}`) && ans.text !== undefined) {
+        const playerId = key.replace(`_${state.currentIndex}`, '');
+        const p = state.participants[playerId];
+        if (p) {
+          const score = p.scores?.[qid]?.score || 0;
+          openAnswers.push({ playerId, name: p.name, text: ans.text, ms: ans.ms, score });
+        }
+      }
+    });
+    openAnswers.sort((a, b) => a.ms - b.ms); // ordem de envio
+    return { openAnswers, answerTotal: openAnswers.length, participantCount, isOpen: true };
+  }
+
   const counts = q.options.map(() => 0);
   let total = 0;
   Object.keys(state.answers).forEach(key => {
@@ -307,7 +330,7 @@ function buildPresenterExtra() {
       if (optionIndex != null) { counts[optionIndex]++; total++; }
     }
   });
-  return { answerCounts: counts, answerTotal: total, participantCount: Object.keys(state.participants).length };
+  return { answerCounts: counts, answerTotal: total, participantCount };
 }
 
 function presenterFullState() {
@@ -354,6 +377,37 @@ io.on('connection', (socket) => {
 
     socket.emit('answerAck', { correct: null });
     io.to('presenter').emit('presenterExtra', buildPresenterExtra());
+  });
+
+  // Resposta aberta
+  socket.on('answerOpen', ({ text }) => {
+    const playerId = socket._playerId;
+    const p = playerId && state.participants[playerId];
+    if (!p || state.phase !== 'question' || state.currentIndex < 0) return;
+    const q = state.activeQuestions[state.currentIndex];
+    if (q.type !== 'open') return;
+    const key = `${playerId}_${state.currentIndex}`;
+    if (state.answers[key]) return; // já respondeu — sem edição
+
+    const trimmed = String(text || '').trim().slice(0, 300);
+    if (!trimmed) return;
+    const ms = Date.now() - state.questionStartedAt;
+    state.answers[key] = { text: trimmed, ms };
+
+    socket.emit('answerAck', { correct: null });
+    io.to('presenter').emit('presenterExtra', buildPresenterExtra());
+  });
+
+  // Presenter atribui/retira ponto em questão aberta
+  socket.on('awardPoint', ({ pin, playerId, delta }) => {
+    if (pin !== PRESENTER_PIN) return;
+    const p = state.participants[playerId];
+    if (!p) return;
+    const qid = state.activeQuiz;
+    if (!p.scores[qid]) p.scores[qid] = { score: 0, totalMs: 0 };
+    p.scores[qid].score = Math.max(0, p.scores[qid].score + delta);
+    // Envia ranking atualizado para o presenter
+    io.to('presenter').emit('presenterExtra', { ...buildPresenterExtra(), ranking: buildRanking() });
   });
 
   socket.on('presenterJoin', ({ pin }) => {

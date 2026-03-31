@@ -186,6 +186,55 @@
     font-size: clamp(13px, 1.4vw, 20px);
   }
   .has-media .opt-card .opt-count { font-size: 12px; }
+
+  /* Respostas abertas */
+  .open-answers-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px; width: 100%;
+  }
+  .open-answer-card {
+    background: var(--card); border: 1px solid #1e3860; border-radius: 14px;
+    padding: 16px; display: flex; flex-direction: column; gap: 10px;
+    position: relative;
+  }
+  .open-answer-name {
+    font-size: 14px; font-weight: 800; color: var(--dourado);
+    text-transform: uppercase; letter-spacing: .5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .open-answer-text {
+    font-size: 16px; line-height: 1.4; color: var(--text); flex: 1;
+  }
+  .open-answer-actions {
+    display: flex; align-items: center; gap: 8px; justify-content: flex-end;
+  }
+  .award-btn {
+    width: 34px; height: 34px; border-radius: 50%; border: 2px solid;
+    font-size: 18px; font-weight: 900; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .15s;
+  }
+  .award-btn:active { transform: scale(.9); }
+  .award-plus  { background: #1a4a1a; border-color: #4caf50; color: #4caf50; }
+  .award-plus:hover  { background: #2a6a2a; }
+  .award-minus { background: #4a1a1a; border-color: #f44336; color: #f44336; }
+  .award-minus:hover { background: #6a1a1a; }
+  .award-score {
+    font-size: 18px; font-weight: 800; color: var(--dourado);
+    min-width: 28px; text-align: center;
+  }
+  .open-pagination {
+    display: flex; align-items: center; justify-content: center;
+    gap: 16px; margin-top: 16px;
+  }
+  .page-btn {
+    padding: 8px 20px; border-radius: 8px; border: 1px solid #1e3860;
+    background: var(--card); color: var(--text); cursor: pointer; font-size: 14px;
+    transition: all .15s;
+  }
+  .page-btn:hover:not(:disabled) { border-color: var(--dourado); }
+  .page-btn:disabled { opacity: .35; cursor: not-allowed; }
+  .page-info { font-size: 13px; color: #7a9cc8; }
   .video-overlay {
     position: absolute; inset: 0;
     display: flex; align-items: center; justify-content: center;
@@ -494,7 +543,7 @@
 
   socket.on('state', (state) => {
     if (currentState) {
-      if (currentState.currentIndex !== state.currentIndex) _lastMediaUrl = null;
+      if (currentState.currentIndex !== state.currentIndex) { _lastMediaUrl = null; _openPage = 0; }
       currentState = { ...currentState, ...state };
       applyState(currentState);
     }
@@ -769,28 +818,91 @@
       btnPlay.style.display = 'none';
     }
 
-    // Opções
     const grid = document.getElementById('optionsGrid');
-    const n = q.optionLabels.length;
-    grid.className = `options-grid cols-${n <= 3 ? n : 2}${hasMedia ? ' has-media' : ''}`;
-    const answerTotal = state.answerTotal || 0;
-    grid.innerHTML = '';
-    q.optionLabels.forEach((label, i) => {
-      const count = state.answerCounts ? (state.answerCounts[i] || 0) : 0;
-      const pct = answerTotal > 0 ? Math.round((count / answerTotal) * 100) : 0;
-      const isCorrect = state.phase === 'reveal' && q.correctIndex === i;
-      const isWrong = state.phase === 'reveal' && q.correctIndex !== null && i !== q.correctIndex;
-      grid.innerHTML += `
-        <div class="opt-card opt-c-${i} ${isCorrect ? 'correct' : ''} ${isWrong ? 'wrong' : ''}">
-          <span class="opt-label">${label}</span>
-          <span class="opt-count">${state.phase === 'reveal' ? `${count} (${pct}%)` : count}</span>
-          <div class="opt-bar" style="width:${pct}%"></div>
+
+    if (q.type === 'open') {
+      // ── Questão aberta: mostrar cards de resposta com pontuação ──────────
+      grid.className = '';
+      if (state.phase === 'reveal' && state.openAnswers) {
+        renderOpenAnswers(state.openAnswers, state.currentIndex);
+      } else {
+        // Fase de pergunta: mostrar contagem de respostas recebidas
+        grid.innerHTML = `<div style="text-align:center;padding:40px;color:var(--dourado);font-size:20px;font-weight:700;">
+          ✏️ Questão aberta &nbsp;—&nbsp; ${state.answerTotal || 0} resposta${(state.answerTotal||0) !== 1 ? 's' : ''} recebida${(state.answerTotal||0) !== 1 ? 's' : ''}
         </div>`;
-    });
+      }
+    } else {
+      // ── Múltipla escolha ──────────────────────────────────────────────────
+      const n = q.optionLabels.length;
+      grid.className = `options-grid cols-${n <= 3 ? n : 2}${hasMedia ? ' has-media' : ''}`;
+      const answerTotal = state.answerTotal || 0;
+      grid.innerHTML = '';
+      q.optionLabels.forEach((label, i) => {
+        const count = state.answerCounts ? (state.answerCounts[i] || 0) : 0;
+        const pct = answerTotal > 0 ? Math.round((count / answerTotal) * 100) : 0;
+        const isCorrect = state.phase === 'reveal' && q.correctIndex === i;
+        const isWrong = state.phase === 'reveal' && q.correctIndex !== null && i !== q.correctIndex;
+        grid.innerHTML += `
+          <div class="opt-card opt-c-${i} ${isCorrect ? 'correct' : ''} ${isWrong ? 'wrong' : ''}">
+            <span class="opt-label">${label}</span>
+            <span class="opt-count">${state.phase === 'reveal' ? `${count} (${pct}%)` : count}</span>
+            <div class="opt-bar" style="width:${pct}%"></div>
+          </div>`;
+      });
+    }
 
     // Progress bar
     const pct = state.totalQuestions > 0 ? ((state.currentIndex + 1) / state.totalQuestions) * 100 : 0;
     document.getElementById('progressFill').style.width = pct + '%';
+  }
+
+  // ── Respostas abertas paginadas ────────────────────────────────────────────
+  let _openPage = 0;
+  const OPEN_PAGE_SIZE = 6;
+
+  function renderOpenAnswers(answers, qIndex) {
+    const grid = document.getElementById('optionsGrid');
+    if (!answers || answers.length === 0) {
+      grid.innerHTML = '<div style="text-align:center;padding:40px;color:#7a9cc8;font-size:18px;">Nenhuma resposta recebida.</div>';
+      return;
+    }
+    const totalPages = Math.ceil(answers.length / OPEN_PAGE_SIZE);
+    if (_openPage >= totalPages) _openPage = totalPages - 1;
+    const page = answers.slice(_openPage * OPEN_PAGE_SIZE, (_openPage + 1) * OPEN_PAGE_SIZE);
+
+    let html = '<div class="open-answers-grid">';
+    page.forEach(ans => {
+      const score = ans.score || 0;
+      html += `
+        <div class="open-answer-card">
+          <div class="open-answer-name">${ans.name}</div>
+          <div class="open-answer-text">${ans.text}</div>
+          <div class="open-answer-actions">
+            <button class="award-btn award-minus" onclick="awardPoint('${ans.playerId}', -1)">−</button>
+            <span class="award-score" id="score_${ans.playerId}">${score}</span>
+            <button class="award-btn award-plus" onclick="awardPoint('${ans.playerId}', +1)">+</button>
+          </div>
+        </div>`;
+    });
+    html += '</div>';
+
+    if (totalPages > 1) {
+      html += `<div class="open-pagination">
+        <button class="page-btn" onclick="openPageNav(-1)" ${_openPage === 0 ? 'disabled' : ''}>← Anterior</button>
+        <span class="page-info">Página ${_openPage + 1} de ${totalPages} &nbsp;(${answers.length} respostas)</span>
+        <button class="page-btn" onclick="openPageNav(1)" ${_openPage >= totalPages - 1 ? 'disabled' : ''}>Próxima →</button>
+      </div>`;
+    }
+    grid.innerHTML = html;
+  }
+
+  function openPageNav(dir) {
+    _openPage += dir;
+    if (currentState?.openAnswers) renderOpenAnswers(currentState.openAnswers, currentState.currentIndex);
+  }
+
+  function awardPoint(playerId, delta) {
+    socket.emit('awardPoint', { pin: presenterPin, playerId, delta });
   }
 
   function toggleVideo() {
@@ -815,16 +927,28 @@
     if (!extra) return;
     document.getElementById('answerCount').textContent = extra.answerTotal || 0;
     document.getElementById('answerTotal').textContent = extra.participantCount || 0;
-    // Atualiza contador do header e do lobby sempre que chegar participantCount
     if (extra.participantCount !== undefined) {
       document.getElementById('hdrP').textContent = extra.participantCount;
       const lobbyCount = document.getElementById('lobbyCount');
       if (lobbyCount) lobbyCount.textContent = extra.participantCount;
     }
-    // Atualizar cards se visíveis
     if (currentState && (currentState.phase === 'question' || currentState.phase === 'reveal')) {
       currentState = { ...currentState, ...extra };
-      renderQuestion(currentState);
+      // Atualizar scores nos cards abertos sem re-render completo
+      if (extra.ranking && currentState.question?.type === 'open') {
+        // Montar mapa playerId→score a partir do ranking
+        const scoreMap = {};
+        if (extra.ranking) extra.ranking.forEach(r => {
+          // ranking não tem playerId direto — precisamos do mapa pelo nome
+          // Usamos rankingScores que é atualizado via presenterExtra
+        });
+        if (extra.openAnswers) {
+          currentState.openAnswers = extra.openAnswers;
+        }
+        renderQuestion(currentState);
+      } else {
+        renderQuestion(currentState);
+      }
     }
   }
 

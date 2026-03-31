@@ -163,6 +163,13 @@
   .quiz-name-field label { font-size: 11px; color: #5a82b8; margin-bottom: 0; font-weight: 700; }
   .quiz-name-field input { margin-bottom: 0; }
   .quiz-name-inactive { opacity: 0.45; }
+  .type-toggle { display: flex; gap: 0; margin-bottom: 16px; border-radius: 10px; overflow: hidden; border: 2px solid #1e3860; }
+  .type-btn {
+    flex: 1; padding: 10px; font-size: 13px; font-weight: 700; border: none;
+    cursor: pointer; transition: all .15s; background: #090f1e; color: #5a82b8;
+  }
+  .type-btn.active { background: #1e5dbf; color: #fff; }
+  .type-btn:first-child { border-right: 1px solid #1e3860; }
   .logo-upload-area {
     border: 2px dashed #1e3860; border-radius: 10px; padding: 16px;
     text-align: center; cursor: pointer; transition: border-color .2s;
@@ -321,6 +328,12 @@
   <div class="card">
     <h2>➕ Nova Questão</h2>
 
+    <label>Tipo de questão</label>
+    <div class="type-toggle">
+      <button type="button" class="type-btn active" id="typeBtnMultiple" onclick="setQuestionType('multiple')">📋 Múltipla escolha</button>
+      <button type="button" class="type-btn" id="typeBtnOpen" onclick="setQuestionType('open')">✏️ Resposta aberta</button>
+    </div>
+
     <label>Mídia da questão (exibida no telão durante a pergunta) — opcional</label>
     <div class="file-upload" id="dropZone" onclick="document.getElementById('mediaFile').click()">
       <input type="file" id="mediaFile" accept="image/*,video/*" onchange="handleFile(this, 'main')">
@@ -348,6 +361,7 @@
       <button type="button" class="quiz-badge quiz-badge-5" id="formQuiz5" onclick="setFormQuiz(5)"></button>
     </div>
 
+    <div id="optionsSection">
     <label>Alternativas <span class="correct-hint">(marque ✅ a correta)</span></label>
     <div class="templates">
       <button class="tpl-btn" onclick="loadTemplate(['Fato','Fake'], 0)">Fato / Fake</button>
@@ -358,6 +372,7 @@
     <div class="options-builder" id="optionsBuilder"></div>
     <button class="add-opt-btn" onclick="addOption('')">+ Adicionar alternativa</button>
 
+    </div><!-- /optionsSection -->
     <div style="margin-top: 18px;">
       <button class="btn btn-primary" id="addBtn" onclick="addQuestion()">💾 Salvar Questão</button>
     </div>
@@ -385,6 +400,16 @@
   let selectedFile = null;
   let selectedRevealFile = null;
   let currentQuizId = null; // null = banco (sem quiz associado)
+  let currentType = 'multiple';
+
+  function setQuestionType(type) {
+    currentType = type;
+    document.getElementById('typeBtnMultiple').classList.toggle('active', type === 'multiple');
+    document.getElementById('typeBtnOpen').classList.toggle('active', type === 'open');
+    // Mostrar/ocultar seção de alternativas
+    const optsSection = document.getElementById('optionsSection');
+    if (optsSection) optsSection.style.display = type === 'open' ? 'none' : 'block';
+  }
 
   let eventConfig = { eventName: '', quizNames: {1:'Quiz 1',2:'Quiz 2',3:'Quiz 3',4:'Quiz 4',5:'Quiz 5'} };
 
@@ -429,6 +454,7 @@
     if (!file) return;
     const fd = new FormData();
     fd.append('pin', adminPin);
+    fd.append('type', currentType);
     fd.append('logo', file);
     const r = await fetch('/api/config/logo', { method: 'POST', body: fd });
     const d = await r.json();
@@ -752,8 +778,10 @@
     const cidx = getCorrectIndex();
 
     if (!prompt) return showStatus('addStatus', 'Digite o texto da questão.', false);
-    if (options.length < 2) return showStatus('addStatus', 'Adicione pelo menos 2 alternativas.', false);
-    if (cidx >= options.length) return showStatus('addStatus', 'Selecione a alternativa correta.', false);
+    if (currentType === 'multiple') {
+      if (options.length < 2) return showStatus('addStatus', 'Adicione pelo menos 2 alternativas.', false);
+      if (cidx >= options.length) return showStatus('addStatus', 'Selecione a alternativa correta.', false);
+    }
 
     const btn = document.getElementById('addBtn');
     btn.disabled = true; btn.textContent = 'Salvando…';
@@ -781,6 +809,7 @@
         document.getElementById('dropLabelReveal').textContent = '🔍 Clique ou arraste a imagem/vídeo de revelação aqui';
         selectedRevealFile = null;
         document.getElementById('mediaFileReveal').value = '';
+        setQuestionType('multiple');
         loadTemplate(['Fato', 'Fake'], 0);
         loadQuestions();
       } else {
@@ -838,11 +867,12 @@
         `<span class="${o.correct ? 'correct' : ''}">${o.label}${o.correct ? ' ✅' : ''}</span>`
       ).join(' · ');
       const mediaTag = q.mediaType ? `<span class="q-media-tag">${q.mediaType === 'video' ? '🎬' : '🖼'} ${q.mediaType}</span>` : '';
+      const typeTag = q.type === 'open' ? '<span class="q-media-tag" style="background:#1a2a40;color:#7ab0ff;">✏️ aberta</span>' : '';
       return `
         <div class="q-item">
           <div class="q-num">${i + 1}</div>
           <div class="q-info">
-            <div class="q-prompt">${q.prompt}${mediaTag}</div>
+            <div class="q-prompt">${q.prompt}${mediaTag}${typeTag}</div>
             <div class="q-opts">${opts}</div>
           </div>
           <div class="q-actions">
