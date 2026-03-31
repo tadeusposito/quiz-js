@@ -454,7 +454,6 @@
     if (!file) return;
     const fd = new FormData();
     fd.append('pin', adminPin);
-    fd.append('type', currentType);
     fd.append('logo', file);
     const r = await fetch('/api/config/logo', { method: 'POST', body: fd });
     const d = await r.json();
@@ -788,6 +787,7 @@
 
     const fd = new FormData();
     fd.append('pin', adminPin);
+    fd.append('type', currentType);
     fd.append('prompt', prompt);
     fd.append('options', JSON.stringify(options));
     fd.append('correctIndex', cidx);
