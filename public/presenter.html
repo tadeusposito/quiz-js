@@ -938,13 +938,22 @@
     if (_openPage >= totalPages) _openPage = totalPages - 1;
     const page = answers.slice(_openPage * OPEN_PAGE_SIZE, (_openPage + 1) * OPEN_PAGE_SIZE);
 
+    const fields = currentState?.question?.fields || ['Resposta'];
     let html = '<div class="open-answers-grid">';
     page.forEach(ans => {
       const score = ans.score || 0;
+      const fieldsArr = Array.isArray(ans.fields) ? ans.fields : (ans.text ? [ans.text] : []);
+      const fieldsHtml = fieldsArr.map((val, i) =>
+        val ? `<div style="font-size:11px;color:#7a9cc8;font-weight:700;margin-top:4px;text-transform:uppercase;letter-spacing:.5px;">${fields[i] || ''}</div>
+               <div class="open-answer-text">${val}</div>` : ''
+      ).join('');
+      const rx = ans.rxCounts || {};
+      const rxHtml = `<div style="font-size:12px;color:#5a82b8;margin-top:6px;">👎${rx['-1']||0} 🤷${rx['0']||0} 👍${rx['1']||0} ❤️${rx['2']||0}</div>`;
       html += `
         <div class="open-answer-card">
           <div class="open-answer-name">${ans.name}</div>
-          <div class="open-answer-text">${ans.text}</div>
+          ${fieldsHtml || '<div class="open-answer-text" style="color:#5a82b8;font-style:italic;">sem resposta</div>'}
+          ${rxHtml}
           <div class="open-answer-actions">
             <button class="award-btn award-minus" onclick="awardPoint('${ans.playerId}', -1)">−</button>
             <span class="award-score" id="score_${ans.playerId}">${score}</span>
