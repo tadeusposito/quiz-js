@@ -145,6 +145,28 @@
   .open-answer-area textarea:disabled { opacity: 0.6; cursor: not-allowed; }
   .char-count { font-size: 12px; color: var(--accent); text-align: right; opacity: .7; }
 
+  /* Reações */
+  #screen-reactions { width: 100%; max-width: 400px; }
+  .reactions-title { font-size: 16px; font-weight: 700; color: var(--accent); text-align: center; margin-bottom: 18px; }
+  .reaction-card {
+    background: var(--card); border: 1px solid var(--btn-bg); border-radius: 14px;
+    padding: 16px; margin-bottom: 14px;
+  }
+  .reaction-card.reacted { border-color: var(--accent); }
+  .reaction-author { font-size: 13px; font-weight: 800; color: var(--accent); margin-bottom: 6px; text-transform: uppercase; }
+  .reaction-field { font-size: 13px; color: #7a9cc8; font-weight: 600; margin-top: 8px; margin-bottom: 2px; }
+  .reaction-text { font-size: 15px; color: var(--text); line-height: 1.4; margin-bottom: 10px; }
+  .reaction-btns { display: flex; gap: 8px; justify-content: center; }
+  .react-btn {
+    flex: 1; padding: 10px 4px; font-size: 22px; border-radius: 10px;
+    border: 2px solid transparent; background: var(--card); cursor: pointer;
+    transition: all .15s; text-align: center;
+  }
+  .react-btn:active:not(:disabled) { transform: scale(.92); }
+  .react-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .react-btn.chosen { border-color: var(--accent); background: #1a2a40; filter: brightness(1.2); }
+  .no-reaction-msg { text-align: center; color: #7a9cc8; font-size: 14px; padding: 20px 0; }
+
   .hidden { display: none !important; }
 </style>
 </head>
@@ -179,6 +201,12 @@
   <div class="options" id="optionsContainer"></div>
   <div class="ack-msg hidden" id="ackMsg"></div>
   <div id="revealBadge"></div>
+</div>
+
+<!-- REACTIONS -->
+<div id="screen-reactions" class="hidden">
+  <div class="reactions-title" id="reactionsTitle">Reaja às respostas!</div>
+  <div id="reactionCards"></div>
 </div>
 
 <!-- RANKING -->
@@ -226,7 +254,7 @@
   });
 
   function show(id) {
-    ['screen-join','screen-lobby','screen-question','screen-ranking'].forEach(s => {
+    ['screen-join','screen-lobby','screen-question','screen-reactions','screen-ranking'].forEach(s => {
       document.getElementById(s).classList.toggle('hidden', s !== id);
     });
   }
@@ -246,6 +274,8 @@
   document.getElementById('nameInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') joinQuiz();
   });
+
+  let currentState = null;
 
   socket.on('joined', (state) => {
     document.getElementById('lobbyName').textContent = myName;
@@ -302,6 +332,18 @@
 
   socket.on('state', applyState);
 
+  socket.on('openPageSync', ({ page, openAnswers }) => {
+    currentPageAnswers = openAnswers || [];
+    // Se estiver na fase reveal de questão aberta, atualiza a tela de reações
+    if (currentState && currentState.phase === 'reveal' && currentState.question?.type === 'open') {
+      showReactionScreen(currentState);
+    }
+  });
+
+  socket.on('reactAck', ({ targetPlayerId, value }) => {
+    // Já tratado localmente em sendReaction
+  });
+
   socket.on('kicked', () => {
     // Reset completo: limpa localStorage e volta pra tela de nome
     localStorage.removeItem('quiz_player_name');
@@ -317,6 +359,7 @@
   });
 
   function applyState(state) {
+    currentState = state;
     totalQuestions = state.totalQuestions;
 
     if (state.phase === 'selectQuiz' || state.phase === 'lobby') {
@@ -354,9 +397,16 @@
       return;
     }
 
-    if (state.phase === 'question' || state.phase === 'reveal') {
+    if (state.phase === 'question') {
       renderQuestion(state);
       show('screen-question');
+    } else if (state.phase === 'reveal') {
+      if (state.question?.type === 'open') {
+        renderQuestion(state); // vai chamar showReactionScreen internamente
+      } else {
+        renderQuestion(state);
+        show('screen-question');
+      }
     }
   }
 
@@ -367,6 +417,8 @@
     if (renderQuestion._lastIndex !== qIdx) {
       myAnswer = null;
       myOpenText = null;
+      myReactions = {};
+      currentPageAnswers = [];
       renderQuestion._lastIndex = qIdx;
       document.getElementById('ackMsg').classList.add('hidden');
       document.getElementById('revealBadge').innerHTML = '';
@@ -381,32 +433,43 @@
     if (q.type === 'open') {
       // ── Questão aberta ──────────────────────────────────────────────────
       const submitted = myOpenText !== null;
-      container.innerHTML = `
-        <div class="open-answer-area">
-          <textarea id="openInput" maxlength="300" placeholder="Digite sua resposta…"
-            ${submitted || state.phase === 'reveal' ? 'disabled' : ''}
-          >${submitted ? myOpenText : ''}</textarea>
-          <div class="char-count" id="charCount">${submitted ? myOpenText.length : 0}/300</div>
-          <button class="btn-primary" id="openSubmitBtn"
-            onclick="sendOpenAnswer()"
-            ${submitted || state.phase === 'reveal' ? 'disabled' : ''}>
-            ${submitted ? '✅ Enviado' : 'Enviar resposta'}
-          </button>
-        </div>`;
-
-      if (!submitted && state.phase !== 'reveal') {
-        const ta = document.getElementById('openInput');
-        if (ta) ta.addEventListener('input', () => {
-          const cc = document.getElementById('charCount');
-          if (cc) cc.textContent = `${ta.value.length}/300`;
-        });
-      }
+      const fields = q.fields || ['Resposta'];
 
       if (state.phase === 'reveal') {
-        document.getElementById('revealBadge').innerHTML =
-          `<div class="reveal-badge reveal-missed" style="background:var(--card);color:var(--accent);">
-            📋 Respostas exibidas no telão
+        // Na fase reveal, mostrar tela de reações
+        showReactionScreen(state);
+        return;
+      }
+
+      let fieldsHtml = '<div class="open-answer-area">';
+      fields.forEach((label, i) => {
+        const storedVal = submitted && myOpenText ? (Array.isArray(myOpenText) ? myOpenText[i] : (i === 0 ? myOpenText : '')) : '';
+        fieldsHtml += `
+          <div style="margin-bottom:4px;">
+            <label style="font-size:12px;color:var(--accent);font-weight:700;display:block;margin-bottom:4px;">${label}</label>
+            <textarea id="openInput_${i}" maxlength="300" placeholder="${label}…" rows="3"
+              style="width:100%;padding:12px;font-size:15px;border-radius:12px;border:2px solid var(--btn-bg);background:var(--card);color:var(--text);outline:none;resize:none;font-family:inherit;transition:border-color .2s;"
+              ${submitted ? 'disabled' : ''}
+            >${storedVal}</textarea>
+            <div style="font-size:11px;color:var(--accent);text-align:right;opacity:.7;" id="cc_${i}">${storedVal.length}/300</div>
           </div>`;
+      });
+      fieldsHtml += `
+        <button class="btn-primary" id="openSubmitBtn" onclick="sendOpenAnswer()"
+          ${submitted ? 'disabled' : ''}>
+          ${submitted ? '✅ Enviado' : 'Enviar resposta'}
+        </button>
+      </div>`;
+      container.innerHTML = fieldsHtml;
+
+      if (!submitted) {
+        fields.forEach((_, i) => {
+          const ta = document.getElementById(`openInput_${i}`);
+          if (ta) ta.addEventListener('input', () => {
+            const cc = document.getElementById(`cc_${i}`);
+            if (cc) cc.textContent = `${ta.value.length}/300`;
+          });
+        });
       }
       return;
     }
@@ -453,17 +516,88 @@
   }
 
   function sendOpenAnswer() {
-    const ta = document.getElementById('openInput');
-    if (!ta || myOpenText !== null) return;
-    const text = ta.value.trim();
-    if (!text) return;
-    myOpenText = text;
-    socket.emit('answerOpen', { text });
-    ta.disabled = true;
+    if (myOpenText !== null) return;
+    // Coletar todos os campos
+    const inputs = document.querySelectorAll('[id^="openInput_"]');
+    const fields = Array.from(inputs).map(i => i.value.trim());
+    if (fields.every(f => !f)) return;
+    myOpenText = fields;
+    socket.emit('answerOpen', { fields });
+    inputs.forEach(i => i.disabled = true);
     const btn = document.getElementById('openSubmitBtn');
     if (btn) { btn.disabled = true; btn.textContent = '✅ Enviado'; }
     document.getElementById('ackMsg').textContent = '✅ Resposta enviada!';
     document.getElementById('ackMsg').classList.remove('hidden');
+  }
+
+  // ── Tela de reações ────────────────────────────────────────────────────────
+  function showReactionScreen(state) {
+    if (!currentPageAnswers || currentPageAnswers.length === 0) {
+      show('screen-lobby');
+      document.querySelector('#screen-lobby p.sub').textContent = 'Aguardando respostas no telão…';
+      return;
+    }
+    const fields = state.question?.fields || ['Resposta'];
+    const title = document.getElementById('reactionsTitle');
+    if (title) title.textContent = `Reaja às respostas! (${currentPageAnswers.length} no telão)`;
+
+    const container = document.getElementById('reactionCards');
+    container.innerHTML = '';
+
+    currentPageAnswers.forEach(ans => {
+      if (ans.playerId === myPlayerId) return; // não reage à própria
+      const reacted = myReactions[ans.playerId];
+      const card = document.createElement('div');
+      card.className = `reaction-card${reacted !== undefined ? ' reacted' : ''}`;
+      card.id = `rcard_${ans.playerId}`;
+
+      let fieldsHtml = '';
+      (ans.fields || [ans.text || '']).forEach((val, i) => {
+        if (!val) return;
+        fieldsHtml += `<div class="reaction-field">${fields[i] || ''}</div>
+          <div class="reaction-text">${val}</div>`;
+      });
+
+      const reacts = [
+        { emoji: '👎', value: -1 },
+        { emoji: '🤷', value: 0 },
+        { emoji: '👍', value: 1 },
+        { emoji: '❤️', value: 2 },
+      ];
+      const btnsHtml = reacts.map(r =>
+        `<button class="react-btn${reacted === r.value ? ' chosen' : ''}"
+          onclick="sendReaction('${ans.playerId}', ${r.value})"
+          ${reacted !== undefined ? 'disabled' : ''}>${r.emoji}</button>`
+      ).join('');
+
+      card.innerHTML = `
+        <div class="reaction-author">✍️ ${ans.name}</div>
+        ${fieldsHtml}
+        <div class="reaction-btns">${btnsHtml}</div>`;
+      container.appendChild(card);
+    });
+
+    // Se todos são do próprio ou não há ninguém pra reagir
+    if (!container.children.length) {
+      container.innerHTML = '<div class="no-reaction-msg">Nada pra reagir aqui! 👍</div>';
+    }
+    show('screen-reactions');
+  }
+
+  function sendReaction(targetPlayerId, value) {
+    if (myReactions[targetPlayerId] !== undefined) return;
+    myReactions[targetPlayerId] = value;
+    socket.emit('react', { targetPlayerId, value });
+    // Atualiza visualmente
+    const card = document.getElementById(`rcard_${targetPlayerId}`);
+    if (card) {
+      card.classList.add('reacted');
+      card.querySelectorAll('.react-btn').forEach(btn => {
+        btn.disabled = true;
+        const btnVal = parseInt(btn.getAttribute('onclick').match(/, (-?\d+)/)?.[1]);
+        if (btnVal === value) btn.classList.add('chosen');
+      });
+    }
   }
 
   function renderRanking(ranking) {

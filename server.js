@@ -106,6 +106,8 @@ const state = {
   currentIndex: -1,
   participants: {},
   answers: {},
+  reactions: {},      // reactions[qIndex][targetPlayerId][reactorPlayerId] = value (-1|0|1|2)
+  openPage: 0,        // página atual de respostas abertas no telão
   questionStartedAt: null,
 };
 
@@ -168,9 +170,12 @@ app.post('/api/questions', uploadFields, (req, res) => {
   const mediaFile = req.files?.media?.[0];
   const revealFile = req.files?.revealMedia?.[0];
   const qType = type === 'open' ? 'open' : 'multiple';
+  const rawFields = req.body.fields;
+  const parsedFields = rawFields ? (Array.isArray(rawFields) ? rawFields : JSON.parse(rawFields)) : ['Resposta'];
   const q = {
     id: Date.now().toString(),
     type: qType,
+    fields: qType === 'open' ? parsedFields.filter(Boolean).map(f => String(f).trim()).slice(0, 5) : [],
     quizId: (quizId === '0' || quizId === undefined || quizId === null || quizId === '') ? null : parseInt(quizId, 10),
     mediaType: mediaFile ? (mediaFile.mimetype.startsWith('video') ? 'video' : 'image') : null,
     mediaUrl: mediaFile ? `/uploads/${mediaFile.filename}` : null,
@@ -275,6 +280,7 @@ function buildPublicState() {
     question: q ? {
       id: q.id,
       type: q.type || 'multiple',
+      fields: q.fields || ['Resposta'],
       mediaType: q.mediaType,
       mediaUrl: q.mediaUrl,
       revealMediaType: state.phase === 'reveal' ? (q.revealMediaType || null) : null,
@@ -283,6 +289,7 @@ function buildPublicState() {
       optionLabels: (q.type === 'open') ? [] : q.options.map(o => o.label),
       correctIndex: (q.type === 'open' || state.phase !== 'reveal') ? null : q.options.findIndex(o => o.correct),
     } : null,
+    openPage: state.openPage,
     participantCount: Object.keys(state.participants).length,
   };
 }
@@ -308,18 +315,24 @@ function buildPresenterExtra() {
     // Para questão aberta: retornar lista de respostas com nomes
     const openAnswers = [];
     const qid = state.activeQuiz || 1;
+    const qReactions = state.reactions[state.currentIndex] || {};
     Object.entries(state.answers).forEach(([key, ans]) => {
-      if (key.endsWith(`_${state.currentIndex}`) && ans.text !== undefined) {
+      if (key.endsWith(`_${state.currentIndex}`) && ans.fields !== undefined) {
         const playerId = key.replace(`_${state.currentIndex}`, '');
         const p = state.participants[playerId];
         if (p) {
           const score = p.scores?.[qid]?.score || 0;
-          openAnswers.push({ playerId, name: p.name, text: ans.text, ms: ans.ms, score });
+          // Calcular totais de reações recebidas por esse participante
+          const rxMap = qReactions[playerId] || {};
+          const rxCounts = { '-1': 0, '0': 0, '1': 0, '2': 0 };
+          let rxTotal = 0;
+          Object.values(rxMap).forEach(v => { rxCounts[String(v)] = (rxCounts[String(v)] || 0) + 1; rxTotal += v; });
+          openAnswers.push({ playerId, name: p.name, fields: ans.fields, ms: ans.ms, score, rxCounts, rxTotal });
         }
       }
     });
-    openAnswers.sort((a, b) => a.ms - b.ms); // ordem de envio
-    return { openAnswers, answerTotal: openAnswers.length, participantCount, isOpen: true };
+    openAnswers.sort((a, b) => a.ms - b.ms);
+    return { openAnswers, answerTotal: openAnswers.length, participantCount, isOpen: true, openPage: state.openPage };
   }
 
   const counts = q.options.map(() => 0);
@@ -380,22 +393,53 @@ io.on('connection', (socket) => {
   });
 
   // Resposta aberta
-  socket.on('answerOpen', ({ text }) => {
+  socket.on('answerOpen', ({ fields }) => {
     const playerId = socket._playerId;
     const p = playerId && state.participants[playerId];
     if (!p || state.phase !== 'question' || state.currentIndex < 0) return;
     const q = state.activeQuestions[state.currentIndex];
     if (q.type !== 'open') return;
     const key = `${playerId}_${state.currentIndex}`;
-    if (state.answers[key]) return; // já respondeu — sem edição
+    if (state.answers[key]) return;
 
-    const trimmed = String(text || '').trim().slice(0, 300);
-    if (!trimmed) return;
     const ms = Date.now() - state.questionStartedAt;
-    state.answers[key] = { text: trimmed, ms };
+    const cleanFields = (Array.isArray(fields) ? fields : [fields])
+      .map(f => String(f || '').trim().slice(0, 300));
+    if (cleanFields.every(f => !f)) return;
+    state.answers[key] = { fields: cleanFields, ms };
 
     socket.emit('answerAck', { correct: null });
     io.to('presenter').emit('presenterExtra', buildPresenterExtra());
+  });
+
+  // Reação de participante a resposta aberta de outro
+  socket.on('react', ({ targetPlayerId, value }) => {
+    const reactorId = socket._playerId;
+    if (!reactorId || state.phase !== 'reveal' || state.currentIndex < 0) return;
+    if (reactorId === targetPlayerId) return; // não reage à própria resposta
+    const q = state.activeQuestions[state.currentIndex];
+    if (q?.type !== 'open') return;
+    if (![-1, 0, 1, 2].includes(value)) return;
+
+    if (!state.reactions[state.currentIndex]) state.reactions[state.currentIndex] = {};
+    if (!state.reactions[state.currentIndex][targetPlayerId]) state.reactions[state.currentIndex][targetPlayerId] = {};
+    // Só uma reação por alvo — bloqueado após escolher
+    if (state.reactions[state.currentIndex][targetPlayerId][reactorId] !== undefined) return;
+
+    state.reactions[state.currentIndex][targetPlayerId][reactorId] = value;
+    // Confirma ao reactor
+    socket.emit('reactAck', { targetPlayerId, value });
+    // Atualiza presenter
+    io.to('presenter').emit('presenterExtra', buildPresenterExtra());
+  });
+
+  // Navegação de página das respostas abertas (controlada pelo presenter)
+  socket.on('openPageChange', ({ pin, page }) => {
+    if (pin !== PRESENTER_PIN) return;
+    state.openPage = page;
+    const extra = buildPresenterExtra();
+    io.emit('openPageSync', { page, openAnswers: extra.openAnswers || [] });
+    io.to('presenter').emit('presenterExtra', extra);
   });
 
   // Presenter atribui/retira ponto em questão aberta
@@ -406,8 +450,32 @@ io.on('connection', (socket) => {
     const qid = state.activeQuiz;
     if (!p.scores[qid]) p.scores[qid] = { score: 0, totalMs: 0 };
     p.scores[qid].score = Math.max(0, p.scores[qid].score + delta);
-    // Envia ranking atualizado para o presenter
     io.to('presenter').emit('presenterExtra', { ...buildPresenterExtra(), ranking: buildRanking() });
+  });
+
+  // Ranking de reações
+  socket.on('reactionRanking', ({ pin }) => {
+    if (pin !== PRESENTER_PIN) return;
+    const qid = state.activeQuiz || 1;
+    const qIdx = state.currentIndex;
+    const qReactions = state.reactions[qIdx] || {};
+    // Para cada participante que respondeu, calcular pontuação de reações
+    const ranking = Object.entries(state.answers)
+      .filter(([key, ans]) => key.endsWith(`_${qIdx}`) && ans.fields)
+      .map(([key, ans]) => {
+        const playerId = key.replace(`_${qIdx}`, '');
+        const p = state.participants[playerId];
+        if (!p) return null;
+        const rxMap = qReactions[playerId] || {};
+        const rxCounts = { '-1': 0, '0': 0, '1': 0, '2': 0 };
+        let rxTotal = 0;
+        Object.values(rxMap).forEach(v => { rxCounts[String(v)] = (rxCounts[String(v)] || 0) + 1; rxTotal += v; });
+        return { playerId, name: p.name, fields: ans.fields, rxCounts, rxTotal };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.rxTotal - a.rxTotal)
+      .map((r, i) => ({ ...r, rank: i + 1 }));
+    socket.emit('reactionRankingData', ranking);
   });
 
   socket.on('presenterJoin', ({ pin }) => {
@@ -426,6 +494,8 @@ io.on('connection', (socket) => {
       state.phase = 'lobby';
       state.currentIndex = -1;
       state.answers = {};
+      state.reactions = {};
+      state.openPage = 0;
       state.questionStartedAt = null;
       // Não kicks participantes — eles continuam conectados entre quizes
       io.emit('state', buildPublicState());
@@ -444,6 +514,7 @@ io.on('connection', (socket) => {
       }
       state.currentIndex = nextIndex;
       state.phase = 'question';
+      state.openPage = 0;
       state.questionStartedAt = Date.now();
       io.emit('state', buildPublicState());
       io.to('presenter').emit('presenterState', presenterFullState());
@@ -484,6 +555,8 @@ io.on('connection', (socket) => {
       state.phase = 'selectQuiz';
       state.currentIndex = -1;
       state.answers = {};
+      state.reactions = {};
+      state.openPage = 0;
       state.questionStartedAt = null;
       state.participants = {};
       io.emit('kicked');

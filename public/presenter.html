@@ -263,6 +263,23 @@
     transition: width .4s;
   }
 
+  /* REACTION RANKING */
+  #reaction-ranking-view { width: 100%; max-width: 860px; }
+  .rx-ranking-title { text-align: center; font-size: 36px; font-weight: 900; color: var(--dourado); margin-bottom: 20px; }
+  .rx-rank-row {
+    display: flex; align-items: center; gap: 16px;
+    background: var(--card); border-radius: 14px;
+    padding: 16px 20px; margin-bottom: 10px; border: 1px solid #1e3860;
+  }
+  .rx-rank-row.top { border-color: var(--dourado); }
+  .rx-pos { font-size: 26px; font-weight: 900; width: 46px; text-align: center; }
+  .rx-name { font-size: 18px; font-weight: 700; flex: 1; }
+  .rx-fields { font-size: 13px; color: #7a9cc8; margin-top: 2px; }
+  .rx-emojis { display: flex; gap: 10px; font-size: 14px; }
+  .rx-emoji-count { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .rx-emoji-count span:first-child { font-size: 20px; }
+  .rx-total { font-size: 20px; font-weight: 800; color: var(--dourado); text-align: right; min-width: 36px; }
+
   /* RANKING */
   #ranking-view { width: 100%; max-width: 800px; }
   .ranking-title { text-align: center; font-size: 40px; font-weight: 900; color: var(--dourado); margin-bottom: 24px; }
@@ -398,6 +415,12 @@
       </div>
     </div>
 
+    <!-- REACTION RANKING -->
+    <div id="reaction-ranking-view" class="hidden">
+      <div class="rx-ranking-title">💬 Ranking de Reações</div>
+      <div id="rxRankList"></div>
+    </div>
+
     <!-- RANKING -->
     <div id="ranking-view" class="hidden">
       <div class="ranking-title">🏆 Ranking Final</div>
@@ -412,6 +435,7 @@
       <div class="ctrl-section">Controles</div>
     <button class="ctrl-btn" id="btnNext" onclick="cmd('next')" style="background:var(--azul-claro);color:#fff;">▶ Próxima Questão</button>
     <button class="ctrl-btn" id="btnReveal" onclick="cmd('reveal')" disabled style="background:#c8a84b;color:#000;margin-top:8px;">👁 Revelar Resposta</button>
+    <button class="ctrl-btn" id="btnReactionRanking" onclick="showReactionRanking()" style="background:#2a1a40;color:#c084fc;margin-top:8px;display:none;">💬 Ranking de Reações</button>
     <button class="ctrl-btn" id="btnPlayPause" onclick="toggleVideo()" style="background:#1a3a60;color:#7ab0ff;margin-top:8px;display:none;">▶ Play Vídeo</button>
     <button class="ctrl-btn" id="btnBackSelect" onclick="cmd('backToSelect')" style="background:#1a2a40;color:#7a9cc8;margin-top:8px;">← Trocar Quiz</button>
     <button class="ctrl-btn" onclick="if(confirm('Resetar tudo e expulsar participantes?')) cmd('lobby')" style="background:#3a1a1a;color:#f44336;margin-top:8px;">↺ Reset Total</button>
@@ -557,6 +581,45 @@
     socket.emit('cmd', { pin: presenterPin, action: 'selectQuiz', quizId });
   }
 
+  function showReactionRanking() {
+    socket.emit('reactionRanking', { pin: presenterPin });
+  }
+
+  socket.on('reactionRankingData', (ranking) => {
+    const view = document.getElementById('reaction-ranking-view');
+    const list = document.getElementById('rxRankList');
+    if (!list) return;
+    const medals = ['🥇','🥈','🥉'];
+    const fields = currentState?.question?.fields || ['Resposta'];
+    list.innerHTML = ranking.map(item => {
+      const pos = item.rank <= 3 ? medals[item.rank - 1] : `${item.rank}º`;
+      const isTop = item.rank <= 3;
+      const rx = item.rxCounts || {};
+      const fieldsArr = Array.isArray(item.fields) ? item.fields : [];
+      const fieldPreview = fieldsArr.map((v, i) =>
+        v ? `<span style="color:#5a82b8;">${fields[i]||''}: </span>${v.slice(0,60)}${v.length>60?'…':''}` : ''
+      ).filter(Boolean).join(' &nbsp;·&nbsp; ');
+      return `
+        <div class="rx-rank-row${isTop?' top':''}">
+          <div class="rx-pos">${pos}</div>
+          <div style="flex:1;min-width:0;">
+            <div class="rx-name">${item.name}</div>
+            <div class="rx-fields">${fieldPreview}</div>
+          </div>
+          <div class="rx-emojis">
+            <div class="rx-emoji-count"><span>👎</span><span>${rx['-1']||0}</span></div>
+            <div class="rx-emoji-count"><span>🤷</span><span>${rx['0']||0}</span></div>
+            <div class="rx-emoji-count"><span>👍</span><span>${rx['1']||0}</span></div>
+            <div class="rx-emoji-count"><span>❤️</span><span>${rx['2']||0}</span></div>
+          </div>
+          <div class="rx-total">${item.rxTotal > 0 ? '+' : ''}${item.rxTotal}</div>
+        </div>`;
+    }).join('') || '<div style="text-align:center;padding:30px;color:#7a9cc8;">Nenhuma reação registrada ainda.</div>';
+
+    if (currentState) currentState.phase = 'reactionRanking';
+    showView('reactionRanking');
+  });
+
   function applyState(state) {
     // Header
     document.getElementById('hdrP').textContent = state.participantCount || 0;
@@ -617,6 +680,9 @@
     const isRanking = state.phase === 'ranking';
     document.getElementById('btnReveal').disabled = !isQuestion;
     document.getElementById('btnBackSelect').style.display = isSelectQuiz ? 'none' : 'block';
+    const isOpenReveal = (state.phase === 'reveal') && (state.question?.type === 'open');
+    const btnRx = document.getElementById('btnReactionRanking');
+    if (btnRx) btnRx.style.display = isOpenReveal ? 'block' : 'none';
     const btnNext = document.getElementById('btnNext');
     btnNext.style.display = isSelectQuiz ? 'none' : 'block';
     if (isFinished) {
@@ -662,8 +728,9 @@
   function showView(phase) {
     document.getElementById('select-quiz-view').classList.toggle('hidden', phase !== 'selectQuiz');
     document.getElementById('lobby-view').classList.toggle('hidden', phase !== 'lobby' && phase !== 'finished');
-    document.getElementById('question-view').classList.toggle('hidden', phase === 'selectQuiz' || phase === 'lobby' || phase === 'ranking' || phase === 'finished');
+    document.getElementById('question-view').classList.toggle('hidden', phase === 'selectQuiz' || phase === 'lobby' || phase === 'ranking' || phase === 'finished' || phase === 'reactionRanking');
     document.getElementById('ranking-view').classList.toggle('hidden', phase !== 'ranking');
+    document.getElementById('reaction-ranking-view').classList.toggle('hidden', phase !== 'reactionRanking');
 
     const lobbyParticipants = document.querySelector('.lobby-participants');
     if (lobbyParticipants) {
@@ -858,6 +925,7 @@
 
   // ── Respostas abertas paginadas ────────────────────────────────────────────
   let _openPage = 0;
+  let _lastEmittedPage = -1;
   const OPEN_PAGE_SIZE = 6;
 
   function renderOpenAnswers(answers, qIndex) {
@@ -897,8 +965,11 @@
   }
 
   function openPageNav(dir) {
-    _openPage += dir;
-    if (currentState?.openAnswers) renderOpenAnswers(currentState.openAnswers, currentState.currentIndex);
+    const answers = currentState?.openAnswers || [];
+    const totalPages = Math.ceil(answers.length / OPEN_PAGE_SIZE);
+    _openPage = Math.max(0, Math.min(_openPage + dir, totalPages - 1));
+    socket.emit('openPageChange', { pin: presenterPin, page: _openPage });
+    renderOpenAnswers(answers, currentState.currentIndex);
   }
 
   function awardPoint(playerId, delta) {
