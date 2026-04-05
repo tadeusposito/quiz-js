@@ -595,7 +595,7 @@ io.on('connection', (socket) => {
       io.to('presenter').emit('presenterState', { ...publicState, ...extra, ranking: buildRanking(), questions: state.questions });
       // Para questão aberta: emite a página 0 para os celulares reagem imediatamente
       if (state.activeQuestions[state.currentIndex]?.type === 'open') {
-        const pageAnswers = (extra.openAnswers || []).slice(0, 6);
+        const pageAnswers = (extra.openAnswers || []).slice(0, 3);
         io.emit('openPageSync', { page: 0, openAnswers: pageAnswers });
       }
     }
