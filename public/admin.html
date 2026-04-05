@@ -94,10 +94,26 @@
   .q-opts { font-size: 13px; color: #5a82b8; }
   .q-opts .correct { color: #4caf50; font-weight: 700; }
   .q-media-tag { font-size: 11px; background: #162848; border-radius: 4px; padding: 2px 7px; color: #7a9cc8; display: inline-block; margin-left: 8px; }
-  .q-actions { display: flex; flex-direction: column; gap: 6px; }
+  .q-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
   .q-actions button { padding: 6px 12px; font-size: 12px; border-radius: 6px; border: none; cursor: pointer; }
   .btn-del { background: #3a1a1a; color: #f44336; }
   .btn-up, .btn-dn { background: #101e35; color: #7a9cc8; }
+  /* Radio group de quiz */
+  .quiz-radio-group { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .quiz-radio-label {
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 20px; border: 2px solid transparent;
+    font-size: 12px; font-weight: 700; cursor: pointer; transition: all .15s;
+    background: #090f1e; color: #5a82b8; border-color: #1e3060;
+  }
+  .quiz-radio-label:hover { border-color: #3a5a90; color: #fff; }
+  .quiz-radio-label.selected-null  { background: #1a1a2a; color: #8a9cc8; border-color: #4a5a80; }
+  .quiz-radio-label.selected-1  { background: #0c1e38; color: #7ab0ff; border-color: #1e5dbf; }
+  .quiz-radio-label.selected-2  { background: #1e1400; color: #c8a84b; border-color: #c8a84b; }
+  .quiz-radio-label.selected-3  { background: #1a0a1e; color: #c084fc; border-color: #a855f7; }
+  .quiz-radio-label.selected-4  { background: #001a14; color: #34d399; border-color: #10b981; }
+  .quiz-radio-label.selected-5  { background: #1a0a00; color: #fb923c; border-color: #f97316; }
+  .quiz-radio-label input[type=radio] { display: none; }
 
   /* PREVIEW */
   .media-preview { margin-bottom: 14px; }
@@ -903,6 +919,26 @@
     loadQuestions();
   }
 
+  // assignQuiz (chamado pelo radio) — apenas faz o PATCH sem reload completo
+  async function assignQuiz(id, val) {
+    const newQuizId = (val === 'null') ? null : parseInt(val, 10);
+    // Atualiza visual dos labels imediatamente
+    document.querySelectorAll(`[name="qquiz_${id}"]`).forEach(radio => {
+      const lbl = radio.closest('label');
+      ['selected-null','selected-1','selected-2','selected-3','selected-4','selected-5'].forEach(c => lbl.classList.remove(c));
+      if (radio.checked) {
+        lbl.classList.add(val === 'null' ? 'selected-null' : 'selected-' + val);
+      }
+    });
+    await fetch(`/api/questions/${id}/quiz`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: adminPin, quizId: newQuizId })
+    });
+    // Atualiza só o sumário sem re-render completo
+    loadQuestions();
+  }
+
   function renderList() {
     const list = document.getElementById('questionList');
     if (questions.length === 0) {
@@ -930,19 +966,29 @@
       const mediaTag = q.mediaType ? `<span class="q-media-tag">${q.mediaType === 'video' ? '🎬' : '🖼'} ${q.mediaType}</span>` : '';
       const fieldNames = q.type === 'open' && q.fields?.length ? q.fields.join(' + ') : '';
       const typeTag = q.type === 'open' ? `<span class="q-media-tag" style="background:#1a2a40;color:#7ab0ff;">✏️ ${fieldNames || 'aberta'}</span>` : '';
+      // Montar radios: Banco + quizes que têm nome configurado ou questões
+      const radioOptions = [
+        { val: 'null', label: '📦 Banco', cls: 'selected-null' },
+        ...([1,2,3,4,5].map(n => ({ val: String(n), label: eventConfig.quizNames?.[n] || 'Quiz ' + n, cls: 'selected-' + n })))
+      ];
+      const radiosHtml = radioOptions.map(opt => {
+        const isSelected = (qid === null && opt.val === 'null') || (qid === Number(opt.val));
+        return `<label class="quiz-radio-label${isSelected ? ' ' + opt.cls : ''}" title="${opt.label}">
+          <input type="radio" name="qquiz_${q.id}" value="${opt.val}" ${isSelected ? 'checked' : ''}
+            onchange="assignQuiz('${q.id}', this.value)">
+          ${opt.label}
+        </label>`;
+      }).join('');
+
       return `
         <div class="q-item">
           <div class="q-num">${i + 1}</div>
           <div class="q-info">
             <div class="q-prompt">${q.prompt}${mediaTag}${typeTag}</div>
             <div class="q-opts">${opts}</div>
+            <div class="quiz-radio-group" style="margin-top:8px;">${radiosHtml}</div>
           </div>
           <div class="q-actions">
-            <button class="${qid === null ? 'quiz-badge' : `quiz-badge quiz-badge-\${qid}`}"
-              style="${qid === null ? 'background:#1a1a2a;color:#8a9cc8;border-color:#4a5a80;' : ''}"
-              onclick="toggleQuiz('${q.id}', ${JSON.stringify(qid)})" title="Clique para mover para outro quiz">
-              ${qid === null ? '📦 Banco' : (eventConfig.quizNames?.[qid] || 'Quiz ' + qid)}
-            </button>
             <button class="btn-up" onclick="moveQ(${i}, -1)" ${i === 0 ? 'disabled' : ''}>▲</button>
             <button class="btn-dn" onclick="moveQ(${i}, 1)" ${i === questions.length - 1 ? 'disabled' : ''}>▼</button>
             <button class="btn-del" onclick="deleteQ('${q.id}')">🗑</button>
