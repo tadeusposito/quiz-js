@@ -509,23 +509,25 @@ io.on('connection', (socket) => {
   // Ranking de reações
   socket.on('reactionRanking', ({ pin }) => {
     if (pin !== PRESENTER_PIN) return;
-    const qid = state.activeQuiz || 1;
-    const qIdx = state.currentIndex;
-    const qReactions = state.reactions[qIdx] || {};
-    // Para cada participante que respondeu, calcular pontuação de reações
-    const ranking = Object.entries(state.answers)
-      .filter(([key, ans]) => key.endsWith(`_${qIdx}`) && ans.fields)
-      .map(([key, ans]) => {
-        const playerId = key.replace(`_${qIdx}`, '');
-        const p = state.participants[playerId];
-        if (!p) return null;
-        const rxMap = qReactions[playerId] || {};
-        const rxCounts = { '-1': 0, '0': 0, '1': 0, '2': 0 };
-        let rxTotal = 0;
-        Object.values(rxMap).forEach(v => { rxCounts[String(v)] = (rxCounts[String(v)] || 0) + 1; rxTotal += v; });
-        return { playerId, name: p.name, fields: ans.fields, rxCounts, rxTotal };
-      })
-      .filter(Boolean)
+    // Agrega reações de TODAS as questões abertas do quiz ativo
+    const totals = {}; // playerId → { name, rxCounts, rxTotal }
+    Object.entries(state.answers).forEach(([key, ans]) => {
+      if (!ans.fields) return; // só questões abertas
+      const parts = key.split('_');
+      const qIdx = parseInt(parts[parts.length - 1], 10);
+      const playerId = parts.slice(0, -1).join('_');
+      const p = state.participants[playerId];
+      if (!p) return;
+      const rxMap = (state.reactions[qIdx] || {})[playerId] || {};
+      if (!totals[playerId]) totals[playerId] = { name: p.name, rxCounts: {'-1':0,'0':0,'1':0,'2':0}, rxTotal: 0 };
+      Object.values(rxMap).forEach(v => {
+        totals[playerId].rxCounts[String(v)] = (totals[playerId].rxCounts[String(v)] || 0) + 1;
+        totals[playerId].rxTotal += v;
+      });
+    });
+    const ranking = Object.entries(totals)
+      .map(([playerId, t]) => ({ playerId, ...t }))
+      .filter(r => r.rxTotal !== 0 || Object.values(r.rxCounts).some(v => v > 0))
       .sort((a, b) => b.rxTotal - a.rxTotal)
       .map((r, i) => ({ ...r, rank: i + 1 }));
     socket.emit('reactionRankingData', ranking);

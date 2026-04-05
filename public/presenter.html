@@ -681,8 +681,10 @@
     document.getElementById('btnReveal').disabled = !isQuestion;
     document.getElementById('btnBackSelect').style.display = isSelectQuiz ? 'none' : 'block';
     const isOpenReveal = (state.phase === 'reveal') && (state.question?.type === 'open');
+    // Mostrar também na fase finished se houver alguma questão aberta com reações
+    const hasOpenQuestions = state.questions?.some(q => q.type === 'open' && (q.quizId === state.activeQuiz));
     const btnRx = document.getElementById('btnReactionRanking');
-    if (btnRx) btnRx.style.display = isOpenReveal ? 'block' : 'none';
+    if (btnRx) btnRx.style.display = (isOpenReveal || (isFinished && hasOpenQuestions)) ? 'block' : 'none';
     const btnNext = document.getElementById('btnNext');
     btnNext.style.display = isSelectQuiz ? 'none' : 'block';
     if (isFinished) {
