@@ -153,6 +153,7 @@
     padding: 16px; margin-bottom: 14px;
   }
   .reaction-card.reacted { border-color: var(--accent); }
+  .reaction-card.own { border-color: #2a3a50; opacity: .75; }
   .reaction-author { font-size: 13px; font-weight: 800; color: var(--accent); margin-bottom: 6px; text-transform: uppercase; }
   .reaction-field { font-size: 13px; color: #7a9cc8; font-weight: 600; margin-top: 8px; margin-bottom: 2px; }
   .reaction-text { font-size: 15px; color: var(--text); line-height: 1.4; margin-bottom: 10px; }
@@ -544,42 +545,55 @@
     const container = document.getElementById('reactionCards');
     container.innerHTML = '';
 
+    let hasOthers = false;
+
     currentPageAnswers.forEach(ans => {
-      if (ans.playerId === myPlayerId) return; // não reage à própria
+      const isOwn = ans.playerId === myPlayerId;
       const reacted = myReactions[ans.playerId];
+
       const card = document.createElement('div');
-      card.className = `reaction-card${reacted !== undefined ? ' reacted' : ''}`;
+      card.className = `reaction-card${reacted !== undefined ? ' reacted' : ''}${isOwn ? ' own' : ''}`;
       card.id = `rcard_${ans.playerId}`;
 
       let fieldsHtml = '';
-      (ans.fields || [ans.text || '']).forEach((val, i) => {
+      (ans.fields || (ans.text ? [ans.text] : [])).forEach((val, i) => {
         if (!val) return;
         fieldsHtml += `<div class="reaction-field">${fields[i] || ''}</div>
           <div class="reaction-text">${val}</div>`;
       });
 
-      const reacts = [
-        { emoji: '👎', value: -1 },
-        { emoji: '🤷', value: 0 },
-        { emoji: '👍', value: 1 },
-        { emoji: '❤️', value: 2 },
-      ];
-      const btnsHtml = reacts.map(r =>
-        `<button class="react-btn${reacted === r.value ? ' chosen' : ''}"
-          onclick="sendReaction('${ans.playerId}', ${r.value})"
-          ${reacted !== undefined ? 'disabled' : ''}>${r.emoji}</button>`
-      ).join('');
-
-      card.innerHTML = `
-        <div class="reaction-author">✍️ ${ans.name}</div>
-        ${fieldsHtml}
-        <div class="reaction-btns">${btnsHtml}</div>`;
+      if (isOwn) {
+        // Própria resposta: mostra mas sem botões de reação
+        card.innerHTML = `
+          <div class="reaction-author" style="color:var(--accent);">✍️ ${ans.name} <span style="font-size:11px;opacity:.7;">(você)</span></div>
+          ${fieldsHtml}
+          <div class="no-reaction-msg" style="font-size:12px;padding:8px 0 0;">Não é possível reagir à própria resposta</div>`;
+      } else {
+        hasOthers = true;
+        const reacts = [
+          { emoji: '👎', value: -1 },
+          { emoji: '🤷', value: 0 },
+          { emoji: '👍', value: 1 },
+          { emoji: '❤️', value: 2 },
+        ];
+        const btnsHtml = reacts.map(r =>
+          `<button class="react-btn${reacted === r.value ? ' chosen' : ''}"
+            onclick="sendReaction('${ans.playerId}', ${r.value})"
+            ${reacted !== undefined ? 'disabled' : ''}>${r.emoji}</button>`
+        ).join('');
+        card.innerHTML = `
+          <div class="reaction-author">✍️ ${ans.name}</div>
+          ${fieldsHtml}
+          <div class="reaction-btns">${btnsHtml}</div>`;
+      }
       container.appendChild(card);
     });
 
-    // Se todos são do próprio ou não há ninguém pra reagir
     if (!container.children.length) {
-      container.innerHTML = '<div class="no-reaction-msg">Nada pra reagir aqui! 👍</div>';
+      container.innerHTML = '<div class="no-reaction-msg">Aguardando respostas no telão… ⏳</div>';
+    } else if (!hasOthers) {
+      // Só tem a própria resposta na página
+      container.innerHTML += '<div class="no-reaction-msg" style="margin-top:12px;">Sua resposta está no telão.<br>Aguarde outras aparecerem para reagir.</div>';
     }
     show('screen-reactions');
   }
