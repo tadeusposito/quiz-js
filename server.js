@@ -47,6 +47,7 @@ function saveSession() {
         answers:     state.answers,
         reactions:   state.reactions,
         participants: state.participants,
+        quizData:    state.quizData,
       };
       fs.writeFileSync(SESSION_FILE, JSON.stringify(data), 'utf8');
     } catch (e) { console.error('Erro ao salvar session.json:', e.message); }
@@ -136,10 +137,15 @@ const uploadFields = upload.fields([{ name: 'media', maxCount: 1 }, { name: 'rev
 
 // ── Estado global ─────────────────────────────────────────────────────────────
 const _session = loadSession();
+
+// quizData persiste respostas por quiz independentemente do quiz ativo
+// quizData[quizId] = { answers, reactions, lastIndex, participants_snapshot }
+const _quizData = _session?.quizData || {};
+
 const state = {
   questions:    loadQuestions(),
   config:       loadConfig(),
-  // Sessão restaurada do disco (ou defaults)
+  quizData:     _quizData,          // respostas permanentes por quiz
   activeQuiz:   _session?.activeQuiz   ?? null,
   phase:        _session?.phase        ?? 'selectQuiz',
   currentIndex: _session?.currentIndex ?? -1,
@@ -148,17 +154,15 @@ const state = {
   answers:      _session?.answers      ?? {},
   reactions:    _session?.reactions    ?? {},
   participants: _session?.participants ?? {},
-  // activeQuestions é derivado — reconstruído abaixo
   activeQuestions: [],
 };
 
-// Reconstrói activeQuestions a partir de activeQuiz salvo
 if (state.activeQuiz) {
   state.activeQuestions = state.questions.filter(q => q.quizId === state.activeQuiz);
 }
 
 console.log(`Questões carregadas: ${state.questions.length}`);
-if (_session) console.log(`Sessão restaurada: fase=${state.phase}, quiz=${state.activeQuiz}, respostas=${Object.keys(state.answers).length}`);
+if (_session) console.log(`Sessão restaurada: fase=${state.phase}, quiz=${state.activeQuiz}, respostas=${Object.keys(state.answers).length}, quizData=${Object.keys(_quizData).length} quizes`);
 
 // ── Static ────────────────────────────────────────────────────────────────────
 app.use(express.json());
@@ -488,8 +492,23 @@ function buildPresenterExtra() {
   return { answerCounts: counts, answerTotal: total, participantCount };
 }
 
+// Arquiva respostas do quiz ativo em quizData (chamado antes de trocar de quiz)
+function archiveCurrentQuiz() {
+  const qid = state.activeQuiz;
+  if (!qid || Object.keys(state.answers).length === 0) return;
+  const answeredIndexes = Object.keys(state.answers)
+    .map(k => parseInt(k.split('_').pop(), 10))
+    .filter(n => !isNaN(n));
+  const lastIndex = answeredIndexes.length ? Math.max(...answeredIndexes) : -1;
+  state.quizData[qid] = {
+    answers:   { ...state.answers },
+    reactions: { ...state.reactions },
+    lastIndex,
+  };
+}
+
 function presenterFullState() {
-  return { ...buildPublicState(), ...buildPresenterExtra(), ranking: buildRanking(), questions: state.questions, answers: state.answers };
+  return { ...buildPublicState(), ...buildPresenterExtra(), ranking: buildRanking(), questions: state.questions, answers: state.answers, quizData: state.quizData };
 }
 
 // ── Socket.io ─────────────────────────────────────────────────────────────────
@@ -530,6 +549,7 @@ io.on('connection', (socket) => {
       p.scores[qid].score++;
       p.scores[qid].totalMs += ms;
     }
+    archiveCurrentQuiz();
     saveSession();
 
     socket.emit('answerAck', { correct: null });
@@ -551,6 +571,7 @@ io.on('connection', (socket) => {
       .map(f => String(f || '').trim().slice(0, 300));
     if (cleanFields.every(f => !f)) return;
     state.answers[key] = { fields: cleanFields, ms };
+    archiveCurrentQuiz();
     saveSession();
 
     socket.emit('answerAck', { correct: null });
@@ -721,11 +742,13 @@ io.on('connection', (socket) => {
       }
     }
 
-    // Novo quiz — zera respostas do quiz selecionado e inicia
+    // Novo quiz — arquiva respostas atuais, zera working set e inicia
     if (action === 'newQuiz') {
       const qid = quizId;
       if (!qid) return;
-      // Zera só as respostas (mantém participantes e suas pontuações zeradas para este quiz)
+      archiveCurrentQuiz(); // salva respostas do quiz anterior antes de limpar
+      // Apagar dados arquivados deste quiz (começar do zero)
+      delete state.quizData[qid];
       state.activeQuiz = qid;
       state.activeQuestions = state.questions.filter(q => q.quizId === qid);
       state.phase = 'lobby';
@@ -734,7 +757,6 @@ io.on('connection', (socket) => {
       state.reactions = {};
       state.openPage = 0;
       state.questionStartedAt = null;
-      // Zera pontuações deste quiz para todos os participantes
       Object.values(state.participants).forEach(p => {
         if (p.scores?.[qid]) p.scores[qid] = { score: 0, totalMs: 0 };
       });
@@ -743,14 +765,21 @@ io.on('connection', (socket) => {
       io.to('presenter').emit('presenterState', presenterFullState());
     }
 
-    // Retomar sessão anterior — vai direto ao reveal da última questão respondida
+    // Retomar sessão — carrega respostas de quizData[quizId]
     if (action === 'resumeSession') {
-      const qid = quizId || state.activeQuiz;
-      if (!qid || Object.keys(state.answers).length === 0) return;
+      const qid = quizId;
+      if (!qid) return;
+      archiveCurrentQuiz(); // arquiva o quiz atual antes de trocar
+      const saved = state.quizData[qid];
+      // Se não há dados arquivados, tenta usar o working set atual (mesmo quiz)
+      const answers   = saved?.answers   || (state.activeQuiz === qid ? state.answers : {});
+      const reactions = saved?.reactions || (state.activeQuiz === qid ? state.reactions : {});
+      if (Object.keys(answers).length === 0) return;
       state.activeQuiz = qid;
       state.activeQuestions = state.questions.filter(q => q.quizId === qid);
-      // Encontrar o índice mais alto com respostas
-      const answeredIndexes = Object.keys(state.answers)
+      state.answers   = answers;
+      state.reactions = reactions;
+      const answeredIndexes = Object.keys(answers)
         .map(k => parseInt(k.split('_').pop(), 10))
         .filter(n => !isNaN(n));
       if (!answeredIndexes.length) return;
@@ -762,7 +791,7 @@ io.on('connection', (socket) => {
       const publicState = buildPublicState();
       const extra = buildPresenterExtra();
       io.emit('state', publicState);
-      io.to('presenter').emit('presenterState', { ...publicState, ...extra, ranking: buildRanking(), questions: state.questions, answers: state.answers });
+      io.to('presenter').emit('presenterState', { ...publicState, ...extra, ranking: buildRanking(), questions: state.questions, answers: state.answers, quizData: state.quizData });
       if (state.activeQuestions[state.currentIndex]?.type === 'open') {
         const pageAnswers = (extra.openAnswers || []).slice(0, 3);
         io.emit('openPageSync', { page: 0, openAnswers: pageAnswers });
@@ -772,19 +801,23 @@ io.on('connection', (socket) => {
       }
     }
 
-    // Volta à tela de seleção de quiz (mantém participantes)
+    // Volta à tela de seleção — arquiva respostas, mantém quizData intacto
     if (action === 'backToSelect') {
+      archiveCurrentQuiz();
       state.activeQuiz = null;
       state.activeQuestions = [];
       state.phase = 'selectQuiz';
       state.currentIndex = -1;
       state.answers = {};
+      state.reactions = {};
       state.questionStartedAt = null;
+      state.openPage = 0;
+      saveSession();
       io.emit('state', buildPublicState());
       io.to('presenter').emit('presenterState', presenterFullState());
     }
 
-    // Reset total (kicks todos)
+    // Reset total (kicks todos e apaga quizData)
     if (action === 'lobby') {
       state.activeQuiz = null;
       state.activeQuestions = [];
@@ -795,6 +828,7 @@ io.on('connection', (socket) => {
       state.openPage = 0;
       state.questionStartedAt = null;
       state.participants = {};
+      state.quizData = {};
       clearSession();
       io.emit('kicked');
       io.emit('state', buildPublicState());
