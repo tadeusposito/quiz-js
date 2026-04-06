@@ -94,6 +94,9 @@
   .opt-1 { background: var(--opt1-bg); border-color: var(--opt1-border); color: var(--opt-text); }
   .opt-2 { background: var(--opt2-bg); border-color: var(--opt2-border); color: var(--opt-text); }
   .opt-3 { background: var(--opt3-bg); border-color: var(--opt3-border); color: var(--opt-text); }
+  /* Poll: todos os botões com a mesma cor neutra */
+  .poll-mode .opt-btn { background: var(--btn-bg); border-color: var(--btn-bg); color: var(--btn-text); }
+  .poll-mode .opt-btn.opt-selected { border-color: var(--accent); filter: brightness(1.3); }
 
   .opt-selected { border-color: var(--accent) !important; filter: brightness(1.3); }
   .opt-correct { background: var(--correct-bg) !important; border-color: var(--correct-border) !important; color: var(--correct-text) !important; }
@@ -480,10 +483,13 @@
       return;
     }
 
-    // ── Múltipla escolha ──────────────────────────────────────────────────
+    // ── Múltipla escolha / Poll ───────────────────────────────────────────
+    if (q.type === 'poll') container.classList.add('poll-mode');
+    else container.classList.remove('poll-mode');
+
     q.optionLabels.forEach((label, i) => {
       const btn = document.createElement('button');
-      btn.className = `opt-btn opt-${i}`;
+      btn.className = `opt-btn opt-${i % 4}`;
       btn.textContent = label;
       if (myAnswer !== null) btn.disabled = true;
       if (myAnswer === i) btn.classList.add('opt-selected');

@@ -417,7 +417,7 @@
       <button class="tpl-btn" onclick="loadTemplate(['A','B','C','D'], 0)">A/B/C/D</button>
     </div>
     <div class="options-builder" id="optionsBuilder"></div>
-    <button class="add-opt-btn" onclick="addOption('')">+ Adicionar alternativa</button>
+    <button class="add-opt-btn" id="addOptBtn" onclick="addOption('')">+ Adicionar alternativa</button>
 
     </div><!-- /optionsSection -->
     <div style="margin-top: 18px;">
@@ -464,6 +464,14 @@
     const correctHint = document.querySelector('.correct-hint');
 
     const isOpen      = type === 'open' || type === 'wordcloud';
+    // Resetar label do botão de adicionar ao trocar tipo
+    const addOptBtn2 = document.getElementById('addOptBtn');
+    if (addOptBtn2) {
+      const maxOpts = type === 'poll' ? 8 : 4;
+      const curCount = document.querySelectorAll('.option-row').length;
+      addOptBtn2.textContent = type === 'poll' ? `+ Adicionar opção (${curCount}/${maxOpts})` : '+ Adicionar alternativa';
+      addOptBtn2.style.display = curCount >= maxOpts ? 'none' : 'block';
+    }
     const isMultiple  = type === 'multiple';
     const isPoll      = type === 'poll';
 
@@ -799,16 +807,26 @@
 
   function addOption(value = '', isCorrect = false) {
     const builder = document.getElementById('optionsBuilder');
+    const maxOpts = currentType === 'poll' ? 8 : 4;
+    if (builder.querySelectorAll('.option-row').length >= maxOpts) return;
     const idx = optionCount++;
     const row = document.createElement('div');
     row.className = 'option-row';
     row.dataset.idx = idx;
     row.innerHTML = `
-      <input type="radio" name="correct" class="radio-correct" value="${idx}" ${isCorrect ? 'checked' : ''} onchange="correctIndex=parseInt(this.value)" title="Marcar como correta">
+      <input type="radio" name="correct" class="radio-correct" value="${idx}" ${isCorrect ? 'checked' : ''} onchange="correctIndex=parseInt(this.value)" title="Marcar como correta" style="${currentType === 'poll' ? 'display:none' : ''}">
       <input type="text" placeholder="Alternativa ${idx + 1}" value="${value}" style="margin-bottom:0">
       <button class="remove-opt" onclick="this.parentElement.remove()" title="Remover">✕</button>`;
     builder.appendChild(row);
     if (isCorrect) correctIndex = idx;
+    // Esconder botão se atingiu o limite
+    const maxOpts = currentType === 'poll' ? 8 : 4;
+    const addBtn = document.getElementById('addOptBtn');
+    if (addBtn) {
+      const count = builder.querySelectorAll('.option-row').length;
+      addBtn.style.display = count >= maxOpts ? 'none' : 'block';
+      addBtn.textContent = currentType === 'poll' ? `+ Adicionar opção (${count}/${maxOpts})` : '+ Adicionar alternativa';
+    }
   }
 
   function getOptions() {
