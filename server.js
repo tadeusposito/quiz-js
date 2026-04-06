@@ -50,7 +50,7 @@ function saveSession() {
       };
       fs.writeFileSync(SESSION_FILE, JSON.stringify(data), 'utf8');
     } catch (e) { console.error('Erro ao salvar session.json:', e.message); }
-  }, 300);
+  }, 100);
 }
 
 function clearSession() {
@@ -808,3 +808,24 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => console.log(`Rodando na porta ${PORT}`));
+
+// ── Flush síncrono antes de sair (Railway envia SIGTERM antes de matar) ────────
+function flushSession() {
+  clearTimeout(_saveSessionTimer);
+  try {
+    const data = {
+      activeQuiz:  state.activeQuiz,
+      phase:       state.phase,
+      currentIndex: state.currentIndex,
+      openPage:    state.openPage,
+      questionStartedAt: state.questionStartedAt,
+      answers:     state.answers,
+      reactions:   state.reactions,
+      participants: state.participants,
+    };
+    fs.writeFileSync(SESSION_FILE, JSON.stringify(data), 'utf8');
+    console.log('Sessão salva antes de encerrar.');
+  } catch (e) { console.error('Erro ao salvar sessão:', e.message); }
+}
+process.on('SIGTERM', () => { flushSession(); process.exit(0); });
+process.on('SIGINT',  () => { flushSession(); process.exit(0); });
