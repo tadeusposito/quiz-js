@@ -297,6 +297,65 @@ app.delete('/api/config/logo', (req, res) => {
   res.json({ ok: true });
 });
 
+// Editar questão existente
+app.patch('/api/questions/:id', uploadFields, (req, res) => {
+  if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
+  const q = state.questions.find(q => q.id === req.params.id);
+  if (!q) return res.status(404).json({ error: 'Não encontrado' });
+
+  const { prompt, options, correctIndex, quizId, type, fields } = req.body;
+  const mediaFile = req.files?.media?.[0];
+  const revealFile = req.files?.revealMedia?.[0];
+
+  // Atualizar campos
+  if (prompt !== undefined) q.prompt = prompt;
+  if (type !== undefined) {
+    const qType = ['open','poll','wordcloud'].includes(type) ? type : 'multiple';
+    q.type = qType;
+    if (['open','wordcloud'].includes(qType) && fields) {
+      q.fields = (Array.isArray(fields) ? fields : JSON.parse(fields))
+        .filter(Boolean).map(f => String(f).trim()).slice(0, 5);
+      q.options = [];
+    } else if (!['open','wordcloud'].includes(qType) && options) {
+      q.fields = [];
+      q.options = JSON.parse(options).map((label, i) => ({
+        label,
+        correct: qType === 'poll' ? false : i === parseInt(correctIndex || '0', 10)
+      }));
+    }
+  } else if (options) {
+    q.options = JSON.parse(options).map((label, i) => ({
+      label,
+      correct: q.type === 'poll' ? false : i === parseInt(correctIndex || '0', 10)
+    }));
+  }
+  if (quizId !== undefined) {
+    q.quizId = (quizId === '' || quizId === null) ? null : parseInt(quizId, 10);
+  }
+
+  // Substituir mídia principal (se enviada)
+  if (mediaFile) {
+    if (q.mediaUrl) {
+      const old = path.join(UPLOADS_DIR, path.basename(q.mediaUrl));
+      if (fs.existsSync(old)) try { fs.unlinkSync(old); } catch(e) {}
+    }
+    q.mediaType = mediaFile.mimetype.startsWith('video') ? 'video' : 'image';
+    q.mediaUrl  = `/uploads/${mediaFile.filename}`;
+  }
+  // Substituir mídia de revelação (se enviada)
+  if (revealFile) {
+    if (q.revealMediaUrl) {
+      const old = path.join(UPLOADS_DIR, path.basename(q.revealMediaUrl));
+      if (fs.existsSync(old)) try { fs.unlinkSync(old); } catch(e) {}
+    }
+    q.revealMediaType = revealFile.mimetype.startsWith('video') ? 'video' : 'image';
+    q.revealMediaUrl  = `/uploads/${revealFile.filename}`;
+  }
+
+  saveQuestions(state.questions);
+  res.json({ ok: true, question: q });
+});
+
 app.post('/api/questions/reorder', (req, res) => {
   if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
   state.questions = req.body.ids.map(id => state.questions.find(q => q.id === id)).filter(Boolean);

@@ -97,6 +97,10 @@
   .q-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
   .q-actions button { padding: 6px 12px; font-size: 12px; border-radius: 6px; border: none; cursor: pointer; }
   .btn-del { background: #3a1a1a; color: #f44336; }
+  .btn-edit { background: #0d2040; color: #7ab0ff; }
+  /* Formulário em modo edição */
+  .form-editing { border: 2px solid #1e5dbf !important; }
+  #editBanner { display:none; background:#0d1e38; border:1px solid #1e5dbf; border-radius:8px; padding:8px 14px; font-size:13px; color:#7ab0ff; margin-bottom:12px; }
   .btn-up, .btn-dn { background: #101e35; color: #7a9cc8; }
   /* Radio group de quiz */
   .quiz-radio-group { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
@@ -380,6 +384,7 @@
     </div>
     <div class="media-preview" id="mediaPreviewReveal"></div>
 
+    <div id="editBanner">✏️ Editando questão — <span id="editBannerName"></span> &nbsp;<button class="color-reset-btn" onclick="cancelEdit()" style="padding:4px 10px;">✕ Cancelar</button></div>
     <label>Texto da questão (o que aparece no celular e no telão)</label>
     <textarea id="qPrompt" placeholder="Ex: Este vídeo foi gerado por inteligência artificial?" rows="3"></textarea>
 
@@ -862,6 +867,92 @@
   });
 
   // ── Salvar questão ─────────────────────────────────────────────────────────
+  let editingId = null; // null = nova questão, string = editando
+
+  function cancelEdit() {
+    editingId = null;
+    document.getElementById('editBanner').style.display = 'none';
+    document.getElementById('addBtn').textContent = '💾 Salvar Questão';
+    document.querySelector('.card h2').textContent = '➕ Nova Questão';
+    // Limpa o form
+    document.getElementById('qPrompt').value = '';
+    document.getElementById('mediaPreview').innerHTML = '';
+    document.getElementById('dropLabel').textContent = '📎 Clique ou arraste uma imagem/vídeo aqui';
+    selectedFile = null;
+    document.getElementById('mediaFile').value = '';
+    document.getElementById('mediaPreviewReveal').innerHTML = '';
+    document.getElementById('dropLabelReveal').textContent = '🔍 Clique ou arraste a imagem/vídeo de revelação aqui';
+    selectedRevealFile = null;
+    document.getElementById('mediaFileReveal').value = '';
+    setQuestionType('multiple');
+    loadTemplate(['Fato', 'Fake'], 0);
+    const fb = document.getElementById('fieldsBuilder');
+    if (fb) fb.innerHTML = '<div class="field-row"><input type="text" placeholder="Campo 1 (ex: Título)" value="Resposta" style="margin-bottom:0"></div>';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function editQuestion(id) {
+    const q = questions.find(q => q.id === id);
+    if (!q) return;
+    editingId = id;
+
+    // Preenche tipo
+    setQuestionType(q.type || 'multiple');
+
+    // Preenche prompt
+    document.getElementById('qPrompt').value = q.prompt || '';
+
+    // Preenche alternativas ou campos
+    if (['open','wordcloud'].includes(q.type)) {
+      const fb = document.getElementById('fieldsBuilder');
+      fb.innerHTML = '';
+      const flds = q.fields?.length ? q.fields : ['Resposta'];
+      flds.forEach((f, i) => {
+        const row = document.createElement('div');
+        row.className = 'field-row';
+        row.innerHTML = `<input type="text" placeholder="Campo ${i+1}" value="${f.replace(/"/g,'&quot;')}" style="margin-bottom:0">
+          ${i > 0 ? '<button type="button" class="remove-field" onclick="this.parentElement.remove()">✕</button>' : ''}`;
+        fb.appendChild(row);
+      });
+    } else {
+      // Múltipla escolha / poll
+      document.getElementById('optionsBuilder').innerHTML = '';
+      const opts = q.options || [];
+      opts.forEach((opt, i) => {
+        addOption(opt.label, opt.correct && q.type !== 'poll');
+      });
+    }
+
+    // Preenche quiz
+    setFormQuiz(q.quizId !== undefined ? q.quizId : null);
+
+    // Mostra mídia atual como preview (sem substituir)
+    if (q.mediaUrl) {
+      document.getElementById('dropLabel').textContent = `📎 ${q.mediaUrl.split('/').pop()} (atual)`;
+      const prev = document.getElementById('mediaPreview');
+      prev.innerHTML = q.mediaType === 'video'
+        ? `<video src="${q.mediaUrl}" controls style="max-width:100%;max-height:180px;border-radius:8px;"></video>`
+        : `<img src="${q.mediaUrl}" style="max-width:100%;max-height:180px;border-radius:8px;">`;
+    }
+    if (q.revealMediaUrl) {
+      document.getElementById('dropLabelReveal').textContent = `🔍 ${q.revealMediaUrl.split('/').pop()} (atual)`;
+      const prev2 = document.getElementById('mediaPreviewReveal');
+      prev2.innerHTML = q.revealMediaType === 'video'
+        ? `<video src="${q.revealMediaUrl}" controls style="max-width:100%;max-height:180px;border-radius:8px;"></video>`
+        : `<img src="${q.revealMediaUrl}" style="max-width:100%;max-height:180px;border-radius:8px;">`;
+    }
+
+    // Banner e botão
+    document.getElementById('editBannerName').textContent = `"${q.prompt.slice(0,40)}${q.prompt.length > 40 ? '…' : ''}"`;
+    document.getElementById('editBanner').style.display = 'flex';
+    document.getElementById('editBanner').style.alignItems = 'center';
+    document.getElementById('editBanner').style.gap = '10px';
+    document.getElementById('addBtn').textContent = '💾 Atualizar Questão';
+    document.querySelector('.card h2').textContent = '✏️ Editando Questão';
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   async function addQuestion() {
     const prompt = document.getElementById('qPrompt').value.trim();
     const options = getOptions();
@@ -877,13 +968,13 @@
     }
 
     const btn = document.getElementById('addBtn');
-    btn.disabled = true; btn.textContent = 'Salvando…';
+    btn.disabled = true; btn.textContent = editingId ? 'Atualizando…' : 'Salvando…';
 
     const fd = new FormData();
     fd.append('pin', adminPin);
     fd.append('type', currentType);
     fd.append('prompt', prompt);
-    if (currentType === 'open') {
+    if (['open','wordcloud'].includes(currentType)) {
       fd.append('fields', JSON.stringify(getOpenFields().length ? getOpenFields() : ['Resposta']));
     }
     fd.append('options', JSON.stringify(options));
@@ -893,25 +984,13 @@
     if (selectedRevealFile) fd.append('revealMedia', selectedRevealFile);
 
     try {
-      const r = await fetch('/api/questions', { method: 'POST', body: fd });
+      const url = editingId ? `/api/questions/${editingId}` : '/api/questions';
+      const method = editingId ? 'PATCH' : 'POST';
+      const r = await fetch(url, { method, body: fd });
       const d = await r.json();
       if (d.ok) {
-        showStatus('addStatus', '✅ Questão salva!', true);
-        document.getElementById('qPrompt').value = '';
-        document.getElementById('mediaPreview').innerHTML = '';
-        document.getElementById('dropLabel').textContent = '📎 Clique ou arraste uma imagem/vídeo aqui';
-        selectedFile = null;
-        document.getElementById('mediaFile').value = '';
-        document.getElementById('mediaPreviewReveal').innerHTML = '';
-        document.getElementById('dropLabelReveal').textContent = '🔍 Clique ou arraste a imagem/vídeo de revelação aqui';
-        selectedRevealFile = null;
-        document.getElementById('mediaFileReveal').value = '';
-        setQuestionType('multiple');
-        loadTemplate(['Fato', 'Fake'], 0);
-        // Reset campos abertos
-        const fb = document.getElementById('fieldsBuilder');
-        if (fb) fb.innerHTML = '<div class="field-row"><input type="text" placeholder="Campo 1 (ex: Título)" value="Resposta" style="margin-bottom:0"></div>';
-        loadTemplate(['Fato', 'Fake'], 0);
+        showStatus('addStatus', editingId ? '✅ Questão atualizada!' : '✅ Questão salva!', true);
+        cancelEdit();
         loadQuestions();
       } else {
         showStatus('addStatus', 'Erro ao salvar.', false);
@@ -919,7 +998,7 @@
     } catch (e) {
       showStatus('addStatus', 'Erro de rede.', false);
     }
-    btn.disabled = false; btn.textContent = '💾 Salvar Questão';
+    btn.disabled = false; btn.textContent = editingId ? '💾 Atualizar Questão' : '💾 Salvar Questão';
   }
 
   // ── Carregar questões ──────────────────────────────────────────────────────
@@ -1016,6 +1095,7 @@
             <div class="quiz-radio-group" style="margin-top:8px;">${radiosHtml}</div>
           </div>
           <div class="q-actions">
+            <button class="btn-edit" onclick="editQuestion('${q.id}')">✏️</button>
             <button class="btn-up" onclick="moveQ(${i}, -1)" ${i === 0 ? 'disabled' : ''}>▲</button>
             <button class="btn-dn" onclick="moveQ(${i}, 1)" ${i === questions.length - 1 ? 'disabled' : ''}>▼</button>
             <button class="btn-del" onclick="deleteQ('${q.id}')">🗑</button>
