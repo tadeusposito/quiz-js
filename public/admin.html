@@ -820,7 +820,6 @@
     builder.appendChild(row);
     if (isCorrect) correctIndex = idx;
     // Esconder botão se atingiu o limite
-    const maxOpts = currentType === 'poll' ? 8 : 4;
     const addBtn = document.getElementById('addOptBtn');
     if (addBtn) {
       const count = builder.querySelectorAll('.option-row').length;
