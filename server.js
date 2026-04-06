@@ -216,20 +216,24 @@ app.post('/api/questions', uploadFields, (req, res) => {
   const { prompt, options, correctIndex, quizId, type } = req.body;
   const mediaFile = req.files?.media?.[0];
   const revealFile = req.files?.revealMedia?.[0];
-  const qType = type === 'open' ? 'open' : 'multiple';
+  const qType = ['open','poll','wordcloud'].includes(type) ? type : 'multiple';
   const rawFields = req.body.fields;
   const parsedFields = rawFields ? (Array.isArray(rawFields) ? rawFields : JSON.parse(rawFields)) : ['Resposta'];
   const q = {
     id: Date.now().toString(),
     type: qType,
-    fields: qType === 'open' ? parsedFields.filter(Boolean).map(f => String(f).trim()).slice(0, 5) : [],
+    fields: ['open','wordcloud'].includes(qType) ? parsedFields.filter(Boolean).map(f => String(f).trim()).slice(0, 5) : [],
     quizId: (quizId === '0' || quizId === undefined || quizId === null || quizId === '') ? null : parseInt(quizId, 10),
     mediaType: mediaFile ? (mediaFile.mimetype.startsWith('video') ? 'video' : 'image') : null,
     mediaUrl: mediaFile ? `/uploads/${mediaFile.filename}` : null,
     revealMediaType: revealFile ? (revealFile.mimetype.startsWith('video') ? 'video' : 'image') : null,
     revealMediaUrl: revealFile ? `/uploads/${revealFile.filename}` : null,
     prompt,
-    options: qType === 'open' ? [] : JSON.parse(options || '[]').map((label, i) => ({ label, correct: i === parseInt(correctIndex, 10) })),
+    options: ['open','wordcloud'].includes(qType) ? [] :
+      JSON.parse(options || '[]').map((label, i) => ({
+        label,
+        correct: qType === 'poll' ? false : i === parseInt(correctIndex, 10)
+      })),
   };
   state.questions.push(q);
   saveQuestions(state.questions);
@@ -336,8 +340,8 @@ function buildPublicState() {
       revealMediaType: state.phase === 'reveal' ? (q.revealMediaType || null) : null,
       revealMediaUrl: state.phase === 'reveal' ? (q.revealMediaUrl || null) : null,
       prompt: q.prompt,
-      optionLabels: (q.type === 'open') ? [] : q.options.map(o => o.label),
-      correctIndex: (q.type === 'open' || state.phase !== 'reveal') ? null : q.options.findIndex(o => o.correct),
+      optionLabels: ['open','wordcloud'].includes(q.type) ? [] : q.options.map(o => o.label),
+      correctIndex: (['open','wordcloud','poll'].includes(q.type) || state.phase !== 'reveal') ? null : q.options.findIndex(o => o.correct),
     } : null,
     openPage: state.openPage,
     participantCount: Object.keys(state.participants).length,
@@ -354,6 +358,28 @@ function buildRanking() {
     .map(p => { const s = getScore(p, qid); return { name: p.name, score: s.score, totalMs: s.totalMs }; })
     .sort((a, b) => b.score - a.score || a.totalMs - b.totalMs)
     .map((p, i) => ({ ...p, rank: i + 1 }));
+}
+
+// ── Normalização para nuvem de palavras ──────────────────────────────────────
+function normalizeWord(w) {
+  return String(w).trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '') // remove pontuação
+    .trim();
+}
+
+function buildWordCloud() {
+  const idx = state.currentIndex;
+  const freq = {};
+  Object.entries(state.answers).forEach(([key, ans]) => {
+    if (!key.endsWith(`_${idx}`) || !ans.fields) return;
+    ans.fields.forEach(f => {
+      const word = normalizeWord(f);
+      if (word) freq[word] = (freq[word] || 0) + 1;
+    });
+  });
+  return freq;
 }
 
 function buildPresenterExtra() {
@@ -385,6 +411,13 @@ function buildPresenterExtra() {
     return { openAnswers, answerTotal: openAnswers.length, participantCount, isOpen: true, openPage: state.openPage };
   }
 
+  if (q.type === 'wordcloud') {
+    const freq = buildWordCloud();
+    const total = Object.keys(state.answers).filter(k => k.endsWith(`_${state.currentIndex}`)).length;
+    return { wordFreq: freq, answerTotal: total, participantCount, isWordCloud: true };
+  }
+
+  // poll e multiple: contagem de opções
   const counts = q.options.map(() => 0);
   let total = 0;
   Object.keys(state.answers).forEach(key => {
@@ -450,7 +483,7 @@ io.on('connection', (socket) => {
     const p = playerId && state.participants[playerId];
     if (!p || state.phase !== 'question' || state.currentIndex < 0) return;
     const q = state.activeQuestions[state.currentIndex];
-    if (q.type !== 'open') return;
+    if (!['open','wordcloud'].includes(q.type)) return;
     const key = `${playerId}_${state.currentIndex}`;
     if (state.answers[key]) return;
 
@@ -471,7 +504,7 @@ io.on('connection', (socket) => {
     if (!reactorId || state.phase !== 'reveal' || state.currentIndex < 0) return;
     if (reactorId === targetPlayerId) return; // não reage à própria resposta
     const q = state.activeQuestions[state.currentIndex];
-    if (q?.type !== 'open') return;
+    if (q?.type !== 'open') return; // reações só em questões abertas
     if (![-1, 0, 1, 2].includes(value)) return;
 
     if (!state.reactions[state.currentIndex]) state.reactions[state.currentIndex] = {};
@@ -599,6 +632,10 @@ io.on('connection', (socket) => {
       if (state.activeQuestions[state.currentIndex]?.type === 'open') {
         const pageAnswers = (extra.openAnswers || []).slice(0, 3);
         io.emit('openPageSync', { page: 0, openAnswers: pageAnswers });
+      }
+      // Para nuvem: emite frequência para o presenter renderizar
+      if (state.activeQuestions[state.currentIndex]?.type === 'wordcloud') {
+        io.to('presenter').emit('wordCloudData', extra.wordFreq || {});
       }
     }
 

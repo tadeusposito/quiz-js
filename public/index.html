@@ -431,6 +431,11 @@
     const container = document.getElementById('optionsContainer');
     container.innerHTML = '';
 
+    if (q.type === 'wordcloud') {
+      // ── Nuvem de palavras: igual à aberta ──────────────────────────────
+      q.type = 'open'; // reutiliza o render de campos abertos
+    }
+
     if (q.type === 'open') {
       // ── Questão aberta ──────────────────────────────────────────────────
       const submitted = myOpenText !== null;
@@ -482,24 +487,34 @@
       btn.textContent = label;
       if (myAnswer !== null) btn.disabled = true;
       if (myAnswer === i) btn.classList.add('opt-selected');
-      if (state.phase === 'reveal' && q.correctIndex !== null) {
+      if (state.phase === 'reveal') {
         btn.disabled = true;
-        if (i === q.correctIndex) btn.classList.add('opt-correct');
-        else if (i === myAnswer && myAnswer !== q.correctIndex) btn.classList.add('opt-wrong');
+        if (q.type !== 'poll' && q.correctIndex !== null) {
+          if (i === q.correctIndex) btn.classList.add('opt-correct');
+          else if (i === myAnswer && myAnswer !== q.correctIndex) btn.classList.add('opt-wrong');
+        } else if (q.type === 'poll' && i === myAnswer) {
+          btn.classList.add('opt-selected');
+        }
       }
       btn.onclick = () => sendAnswer(i);
       container.appendChild(btn);
     });
 
-    if (state.phase === 'reveal' && myAnswer !== null) {
-      const correct = myAnswer === q.correctIndex;
-      document.getElementById('revealBadge').innerHTML =
-        `<div class="reveal-badge ${correct ? 'reveal-correct' : 'reveal-wrong'}">
-          ${correct ? '✅ Correto!' : '❌ Errou…'}
-        </div>`;
-    } else if (state.phase === 'reveal' && myAnswer === null) {
-      document.getElementById('revealBadge').innerHTML =
-        `<div class="reveal-badge reveal-missed">⏱ Não respondeu a tempo</div>`;
+    if (state.phase === 'reveal') {
+      if (q.type === 'poll') {
+        document.getElementById('revealBadge').innerHTML = myAnswer !== null
+          ? `<div class="reveal-badge" style="background:var(--card);color:var(--accent);">📊 Voto registrado!</div>`
+          : `<div class="reveal-badge reveal-missed">⏱ Não votou</div>`;
+      } else if (myAnswer !== null) {
+        const correct = myAnswer === q.correctIndex;
+        document.getElementById('revealBadge').innerHTML =
+          `<div class="reveal-badge ${correct ? 'reveal-correct' : 'reveal-wrong'}">
+            ${correct ? '✅ Correto!' : '❌ Errou…'}
+          </div>`;
+      } else {
+        document.getElementById('revealBadge').innerHTML =
+          `<div class="reveal-badge reveal-missed">⏱ Não respondeu a tempo</div>`;
+      }
     }
   }
   renderQuestion._lastIndex = -1;
@@ -527,7 +542,8 @@
     inputs.forEach(i => i.disabled = true);
     const btn = document.getElementById('openSubmitBtn');
     if (btn) { btn.disabled = true; btn.textContent = '✅ Enviado'; }
-    document.getElementById('ackMsg').textContent = '✅ Resposta enviada!';
+    const isWc = currentState?.question?.type === 'wordcloud';
+    document.getElementById('ackMsg').textContent = isWc ? '☁️ Palavra enviada!' : '✅ Resposta enviada!';
     document.getElementById('ackMsg').classList.remove('hidden');
   }
 
