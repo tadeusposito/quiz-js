@@ -370,13 +370,23 @@
   .quiz-btn-5 { background: #1a0a00; border-color: #f97316; color: #fff; }
   .quiz-btn-5:hover { background: #301200; transform: scale(1.04); }
   .quiz-btn-count { font-size: 13px; font-weight: 400; opacity: .8; }
-  .resume-btn {
-    margin-top: 28px; padding: 18px 36px; border-radius: 16px; font-size: 20px; font-weight: 800;
-    border: 2px solid #c084fc; background: #1a0a2e; color: #c084fc; cursor: pointer;
-    transition: all .2s; display: inline-flex; flex-direction: column; align-items: center; gap: 6px;
+  /* Card de quiz com ações */
+  .quiz-card {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
   }
-  .resume-btn:hover { background: #2d1040; transform: scale(1.03); }
-  .resume-btn-sub { font-size: 13px; font-weight: 400; opacity: .75; }
+  .quiz-card-name {
+    font-size: clamp(18px,2vw,26px); font-weight: 800;
+  }
+  .quiz-card-count { font-size: 13px; font-weight: 400; opacity: .8; }
+  .quiz-card-actions { display: flex; gap: 8px; width: 100%; }
+  .quiz-action-btn {
+    flex: 1; padding: 10px 8px; border-radius: 10px; border: 2px solid transparent;
+    font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s;
+  }
+  .quiz-action-new { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.2); color: #fff; }
+  .quiz-action-new:hover { background: rgba(255,255,255,.15); }
+  .quiz-action-resume { background: rgba(192,132,252,.15); border-color: #c084fc; color: #c084fc; }
+  .quiz-action-resume:hover { background: rgba(192,132,252,.25); }
 
   .hidden { display: none !important; }
 </style>
@@ -412,15 +422,8 @@
     <!-- SELEÇÃO DE QUIZ -->
     <div id="select-quiz-view" class="hidden">
       <div class="quiz-select-title" id="selectEventName">Quiz Interativo</div>
-      <div class="quiz-select-sub">Selecione qual quiz iniciar</div>
+      <div class="quiz-select-sub">Selecione qual quiz</div>
       <div class="quiz-select-btns" id="quizSelectBtns"></div>
-      <div id="resumeArea" style="display:none; margin-top:28px; padding-top:24px; border-top:1px solid #1e3060;">
-        <div style="font-size:13px;color:#7a9cc8;margin-bottom:12px;">Sessão anterior detectada</div>
-        <button class="resume-btn" onclick="resumeSession()">
-          ↩ Retomar sessão anterior
-          <span class="resume-btn-sub" id="resumeInfo"></span>
-        </button>
-      </div>
     </div>
 
     <!-- LOBBY -->
@@ -626,8 +629,13 @@
     socket.emit('cmd', { pin: presenterPin, action: 'selectQuiz', quizId });
   }
 
-  function resumeSession() {
-    socket.emit('cmd', { pin: presenterPin, action: 'resumeSession' });
+  function newQuiz(quizId) {
+    if (!confirm('Iniciar novo quiz? As respostas anteriores serão apagadas.')) return;
+    socket.emit('cmd', { pin: presenterPin, action: 'newQuiz', quizId });
+  }
+
+  function resumeSession(quizId) {
+    socket.emit('cmd', { pin: presenterPin, action: 'resumeSession', quizId });
   }
 
   function showReactionRanking() {
@@ -703,25 +711,8 @@
       applyFont(state.config.font || 'Inter');
     }
 
-    // Botão de retomar sessão — aparece se houver respostas salvas
-    const resumeArea = document.getElementById('resumeArea');
-    if (resumeArea) {
-      const hasAnswers = state.answers && Object.keys(state.answers).length > 0;
-      const hasActiveQuiz = state.activeQuiz !== null;
-      if (hasAnswers && hasActiveQuiz && state.phase === 'selectQuiz') {
-        const qName = state.config?.quizNames?.[state.activeQuiz] || `Quiz ${state.activeQuiz}`;
-        const ansCount = Object.keys(state.answers).length;
-        const el = document.getElementById('resumeInfo');
-        if (el) el.textContent = `${qName} · ${ansCount} resposta${ansCount !== 1 ? 's' : ''} salva${ansCount !== 1 ? 's' : ''}`;
-        resumeArea.style.display = 'block';
-      } else {
-        resumeArea.style.display = 'none';
-      }
-    }
-
-    // Botões de seleção de quiz — só mostra quizes com questões
+    // Cards de quiz com ações (Novo / Ver respostas anteriores)
     if (state.questions && state.config) {
-      const colors = ['#1e5dbf','#c8a84b','#a855f7','#10b981','#f97316'];
       const container = document.getElementById('quizSelectBtns');
       if (container) {
         container.innerHTML = '';
@@ -729,11 +720,38 @@
           const count = state.questions.filter(q => q.quizId === i).length;
           if (count === 0) continue;
           const name = state.config.quizNames?.[i] || `Quiz ${i}`;
-          const btn = document.createElement('button');
-          btn.className = `quiz-btn quiz-btn-${i}`;
-          btn.innerHTML = `${name}<span class="quiz-btn-count">${count} ${count !== 1 ? 'questões' : 'questão'}</span>`;
-          btn.onclick = () => selectQuiz(i);
-          container.appendChild(btn);
+          // Verificar se há respostas salvas para este quiz
+          const hasSavedAnswers = state.answers &&
+            Object.keys(state.answers).length > 0 &&
+            state.activeQuiz === i;
+          const ansCount = hasSavedAnswers
+            ? Object.keys(state.answers).filter(k => {
+                const idx = parseInt(k.split('_').pop(), 10);
+                return !isNaN(idx);
+              }).length
+            : 0;
+
+          const card = document.createElement('div');
+          card.className = `quiz-btn quiz-btn-${i} quiz-card`;
+
+          if (hasSavedAnswers && ansCount > 0) {
+            // Tem histórico — mostra dois botões
+            card.innerHTML = `
+              <div class="quiz-card-name">${name}</div>
+              <div class="quiz-card-count">${count} ${count !== 1 ? 'questões' : 'questão'} · ${ansCount} resposta${ansCount !== 1 ? 's' : ''} salva${ansCount !== 1 ? 's' : ''}</div>
+              <div class="quiz-card-actions">
+                <button class="quiz-action-btn quiz-action-new" onclick="event.stopPropagation(); newQuiz(${i})">🆕 Novo quiz</button>
+                <button class="quiz-action-btn quiz-action-resume" onclick="event.stopPropagation(); resumeSession(${i})">↩ Ver respostas</button>
+              </div>`;
+          } else {
+            // Sem histórico — botão simples
+            card.innerHTML = `
+              <div class="quiz-card-name">${name}</div>
+              <div class="quiz-card-count">${count} ${count !== 1 ? 'questões' : 'questão'}</div>`;
+            card.onclick = () => selectQuiz(i);
+            card.style.cursor = 'pointer';
+          }
+          container.appendChild(card);
         }
       }
     }

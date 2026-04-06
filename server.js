@@ -721,13 +721,34 @@ io.on('connection', (socket) => {
       }
     }
 
+    // Novo quiz — zera respostas do quiz selecionado e inicia
+    if (action === 'newQuiz') {
+      const qid = quizId;
+      if (!qid) return;
+      // Zera só as respostas (mantém participantes e suas pontuações zeradas para este quiz)
+      state.activeQuiz = qid;
+      state.activeQuestions = state.questions.filter(q => q.quizId === qid);
+      state.phase = 'lobby';
+      state.currentIndex = -1;
+      state.answers = {};
+      state.reactions = {};
+      state.openPage = 0;
+      state.questionStartedAt = null;
+      // Zera pontuações deste quiz para todos os participantes
+      Object.values(state.participants).forEach(p => {
+        if (p.scores?.[qid]) p.scores[qid] = { score: 0, totalMs: 0 };
+      });
+      saveSession();
+      io.emit('state', buildPublicState());
+      io.to('presenter').emit('presenterState', presenterFullState());
+    }
+
     // Retomar sessão anterior — vai direto ao reveal da última questão respondida
     if (action === 'resumeSession') {
-      if (!state.activeQuiz || Object.keys(state.answers).length === 0) return;
-      // Garante que activeQuestions está populado
-      if (!state.activeQuestions.length) {
-        state.activeQuestions = state.questions.filter(q => q.quizId === state.activeQuiz);
-      }
+      const qid = quizId || state.activeQuiz;
+      if (!qid || Object.keys(state.answers).length === 0) return;
+      state.activeQuiz = qid;
+      state.activeQuestions = state.questions.filter(q => q.quizId === qid);
       // Encontrar o índice mais alto com respostas
       const answeredIndexes = Object.keys(state.answers)
         .map(k => parseInt(k.split('_').pop(), 10))
@@ -741,11 +762,13 @@ io.on('connection', (socket) => {
       const publicState = buildPublicState();
       const extra = buildPresenterExtra();
       io.emit('state', publicState);
-      io.to('presenter').emit('presenterState', { ...publicState, ...extra, ranking: buildRanking(), questions: state.questions });
-      // Para questão aberta: sincroniza celulares
+      io.to('presenter').emit('presenterState', { ...publicState, ...extra, ranking: buildRanking(), questions: state.questions, answers: state.answers });
       if (state.activeQuestions[state.currentIndex]?.type === 'open') {
         const pageAnswers = (extra.openAnswers || []).slice(0, 3);
         io.emit('openPageSync', { page: 0, openAnswers: pageAnswers });
+      }
+      if (state.activeQuestions[state.currentIndex]?.type === 'wordcloud') {
+        io.to('presenter').emit('wordCloudData', extra.wordFreq || {});
       }
     }
 
