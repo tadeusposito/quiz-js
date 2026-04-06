@@ -489,7 +489,7 @@ function buildPresenterExtra() {
 }
 
 function presenterFullState() {
-  return { ...buildPublicState(), ...buildPresenterExtra(), ranking: buildRanking(), questions: state.questions };
+  return { ...buildPublicState(), ...buildPresenterExtra(), ranking: buildRanking(), questions: state.questions, answers: state.answers };
 }
 
 // ── Socket.io ─────────────────────────────────────────────────────────────────
@@ -669,6 +669,29 @@ io.on('connection', (socket) => {
       io.to('presenter').emit('presenterState', presenterFullState());
     }
 
+    if (action === 'prev') {
+      if (state.currentIndex <= 0) return;
+      state.currentIndex--;
+      state.openPage = 0;
+      // Se tinha respostas nessa questão, vai pro reveal; senão, pergunta
+      const hasAnswers = Object.keys(state.answers).some(k => k.endsWith(`_${state.currentIndex}`));
+      state.phase = hasAnswers ? 'reveal' : 'question';
+      if (!hasAnswers) state.questionStartedAt = Date.now();
+      saveSession();
+      const publicState = buildPublicState();
+      const extra = buildPresenterExtra();
+      io.emit('state', publicState);
+      io.to('presenter').emit('presenterState', { ...publicState, ...extra, ranking: buildRanking(), questions: state.questions, answers: state.answers });
+      // Sync celulares para questão aberta em reveal
+      if (state.phase === 'reveal' && state.activeQuestions[state.currentIndex]?.type === 'open') {
+        const pageAnswers = (extra.openAnswers || []).slice(0, 3);
+        io.emit('openPageSync', { page: 0, openAnswers: pageAnswers });
+      }
+      if (state.phase === 'reveal' && state.activeQuestions[state.currentIndex]?.type === 'wordcloud') {
+        io.to('presenter').emit('wordCloudData', extra.wordFreq || {});
+      }
+    }
+
     if (action === 'ranking') {
       if (state.phase !== 'finished') return;
       state.phase = 'ranking';
@@ -695,6 +718,34 @@ io.on('connection', (socket) => {
       // Para nuvem: emite frequência para o presenter renderizar
       if (state.activeQuestions[state.currentIndex]?.type === 'wordcloud') {
         io.to('presenter').emit('wordCloudData', extra.wordFreq || {});
+      }
+    }
+
+    // Retomar sessão anterior — vai direto ao reveal da última questão respondida
+    if (action === 'resumeSession') {
+      if (!state.activeQuiz || Object.keys(state.answers).length === 0) return;
+      // Garante que activeQuestions está populado
+      if (!state.activeQuestions.length) {
+        state.activeQuestions = state.questions.filter(q => q.quizId === state.activeQuiz);
+      }
+      // Encontrar o índice mais alto com respostas
+      const answeredIndexes = Object.keys(state.answers)
+        .map(k => parseInt(k.split('_').pop(), 10))
+        .filter(n => !isNaN(n));
+      if (!answeredIndexes.length) return;
+      const lastIdx = Math.max(...answeredIndexes);
+      state.currentIndex = Math.min(lastIdx, state.activeQuestions.length - 1);
+      state.phase = 'reveal';
+      state.openPage = 0;
+      saveSession();
+      const publicState = buildPublicState();
+      const extra = buildPresenterExtra();
+      io.emit('state', publicState);
+      io.to('presenter').emit('presenterState', { ...publicState, ...extra, ranking: buildRanking(), questions: state.questions });
+      // Para questão aberta: sincroniza celulares
+      if (state.activeQuestions[state.currentIndex]?.type === 'open') {
+        const pageAnswers = (extra.openAnswers || []).slice(0, 3);
+        io.emit('openPageSync', { page: 0, openAnswers: pageAnswers });
       }
     }
 

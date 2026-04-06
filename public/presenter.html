@@ -362,6 +362,13 @@
   .quiz-btn-5 { background: #1a0a00; border-color: #f97316; color: #fff; }
   .quiz-btn-5:hover { background: #301200; transform: scale(1.04); }
   .quiz-btn-count { font-size: 13px; font-weight: 400; opacity: .8; }
+  .resume-btn {
+    margin-top: 28px; padding: 18px 36px; border-radius: 16px; font-size: 20px; font-weight: 800;
+    border: 2px solid #c084fc; background: #1a0a2e; color: #c084fc; cursor: pointer;
+    transition: all .2s; display: inline-flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .resume-btn:hover { background: #2d1040; transform: scale(1.03); }
+  .resume-btn-sub { font-size: 13px; font-weight: 400; opacity: .75; }
 
   .hidden { display: none !important; }
 </style>
@@ -399,6 +406,13 @@
       <div class="quiz-select-title" id="selectEventName">Quiz Interativo</div>
       <div class="quiz-select-sub">Selecione qual quiz iniciar</div>
       <div class="quiz-select-btns" id="quizSelectBtns"></div>
+      <div id="resumeArea" style="display:none; margin-top:28px; padding-top:24px; border-top:1px solid #1e3060;">
+        <div style="font-size:13px;color:#7a9cc8;margin-bottom:12px;">Sessão anterior detectada</div>
+        <button class="resume-btn" onclick="resumeSession()">
+          ↩ Retomar sessão anterior
+          <span class="resume-btn-sub" id="resumeInfo"></span>
+        </button>
+      </div>
     </div>
 
     <!-- LOBBY -->
@@ -452,7 +466,10 @@
   <div class="controls-panel">
     <div style="margin-top: 20px;">
       <div class="ctrl-section">Controles</div>
-    <button class="ctrl-btn" id="btnNext" onclick="cmd('next')" style="background:var(--azul-claro);color:#fff;">▶ Próxima Questão</button>
+    <div style="display:flex;gap:6px;">
+      <button class="ctrl-btn" id="btnPrev" onclick="cmd('prev')" style="background:#101e35;color:#7a9cc8;flex:0 0 44px;padding:14px 0;font-size:18px;" title="Questão anterior">◀</button>
+      <button class="ctrl-btn" id="btnNext" onclick="cmd('next')" style="background:var(--azul-claro);color:#fff;flex:1;">▶ Próxima</button>
+    </div>
     <button class="ctrl-btn" id="btnReveal" onclick="cmd('reveal')" disabled style="background:#c8a84b;color:#000;margin-top:8px;">👁 Revelar Resposta</button>
     <button class="ctrl-btn" id="btnReactionRanking" onclick="showReactionRanking()" style="background:#2a1a40;color:#c084fc;margin-top:8px;display:none;">💬 Ranking de Reações</button>
     <button class="ctrl-btn" id="btnPlayPause" onclick="toggleVideo()" style="background:#1a3a60;color:#7ab0ff;margin-top:8px;display:none;">▶ Play Vídeo</button>
@@ -601,6 +618,10 @@
     socket.emit('cmd', { pin: presenterPin, action: 'selectQuiz', quizId });
   }
 
+  function resumeSession() {
+    socket.emit('cmd', { pin: presenterPin, action: 'resumeSession' });
+  }
+
   function showReactionRanking() {
     socket.emit('reactionRanking', { pin: presenterPin });
   }
@@ -674,6 +695,22 @@
       applyFont(state.config.font || 'Inter');
     }
 
+    // Botão de retomar sessão — aparece se houver respostas salvas
+    const resumeArea = document.getElementById('resumeArea');
+    if (resumeArea) {
+      const hasAnswers = state.answers && Object.keys(state.answers).length > 0;
+      const hasActiveQuiz = state.activeQuiz !== null;
+      if (hasAnswers && hasActiveQuiz && state.phase === 'selectQuiz') {
+        const qName = state.config?.quizNames?.[state.activeQuiz] || `Quiz ${state.activeQuiz}`;
+        const ansCount = Object.keys(state.answers).length;
+        const el = document.getElementById('resumeInfo');
+        if (el) el.textContent = `${qName} · ${ansCount} resposta${ansCount !== 1 ? 's' : ''} salva${ansCount !== 1 ? 's' : ''}`;
+        resumeArea.style.display = 'block';
+      } else {
+        resumeArea.style.display = 'none';
+      }
+    }
+
     // Botões de seleção de quiz — só mostra quizes com questões
     if (state.questions && state.config) {
       const colors = ['#1e5dbf','#c8a84b','#a855f7','#10b981','#f97316'];
@@ -700,6 +737,12 @@
     const isRanking = state.phase === 'ranking';
     document.getElementById('btnReveal').disabled = !isQuestion;
     document.getElementById('btnBackSelect').style.display = isSelectQuiz ? 'none' : 'block';
+    const btnPrev = document.getElementById('btnPrev');
+    if (btnPrev) {
+      btnPrev.style.display = isSelectQuiz ? 'none' : 'flex';
+      btnPrev.disabled = (state.currentIndex <= 0) || isSelectQuiz;
+      btnPrev.style.opacity = btnPrev.disabled ? '.3' : '1';
+    }
     const isOpenReveal = (state.phase === 'reveal') && (state.question?.type === 'open');
     // Mostrar também na fase finished se houver alguma questão aberta com reações
     const hasOpenQuestions = state.questions?.some(q => q.type === 'open' && (q.quizId === state.activeQuiz));
