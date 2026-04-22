@@ -560,9 +560,11 @@ io.on('connection', (socket) => {
   socket.on('answerOpen', ({ fields }) => {
     const playerId = socket._playerId;
     const p = playerId && state.participants[playerId];
-    if (!p || state.phase !== 'question' || state.currentIndex < 0) return;
+    if (!p || state.currentIndex < 0) return;
     const q = state.activeQuestions[state.currentIndex];
     if (!['open','wordcloud'].includes(q.type)) return;
+    // open/wordcloud aceitam respostas tanto em 'question' quanto em 'reveal'
+    if (!['question','reveal'].includes(state.phase)) return;
     const key = `${playerId}_${state.currentIndex}`;
     if (state.answers[key]) return;
 

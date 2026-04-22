@@ -445,12 +445,22 @@
       const fields = q.fields || ['Resposta'];
 
       if (state.phase === 'reveal') {
-        // Na fase reveal, mostrar tela de reações
-        showReactionScreen(state);
-        return;
+        if (myOpenText !== null) {
+          // Já respondeu — mostra tela de reações
+          showReactionScreen(state);
+          return;
+        }
+        // Ainda não respondeu — mantém formulário aberto com aviso
+        // (o formulário abaixo vai renderizar normalmente, mas com banner)
       }
 
+      const revealLate = state.phase === 'reveal' && myOpenText === null;
       let fieldsHtml = '<div class="open-answer-area">';
+      if (revealLate) {
+        fieldsHtml += `<div style="font-size:13px;color:var(--accent);text-align:center;padding:8px;background:rgba(200,168,75,.1);border-radius:8px;margin-bottom:10px;">
+          ⏳ Ainda dá tempo — envie sua resposta!
+        </div>`;
+      }
       fields.forEach((label, i) => {
         const storedVal = submitted && myOpenText ? (Array.isArray(myOpenText) ? myOpenText[i] : (i === 0 ? myOpenText : '')) : '';
         fieldsHtml += `
@@ -551,6 +561,10 @@
     const isWc = currentState?.question?.type === 'wordcloud';
     document.getElementById('ackMsg').textContent = isWc ? '☁️ Palavra enviada!' : '✅ Resposta enviada!';
     document.getElementById('ackMsg').classList.remove('hidden');
+    // Se já está no reveal, vai para a tela de reações após enviar
+    if (currentState?.phase === 'reveal') {
+      setTimeout(() => showReactionScreen(currentState), 800);
+    }
   }
 
   // ── Tela de reações ────────────────────────────────────────────────────────
