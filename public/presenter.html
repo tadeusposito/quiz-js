@@ -546,13 +546,18 @@
       _lastMediaUrl = null;
       _openPage = 0;
     }
-    // Ao fazer login (primeira vez), sempre vai pra tela de seleção
-    // para garantir que o usuário veja os botões de cada quiz
-    if (!currentState) {
-      currentState = { ...state, phase: 'selectQuiz' };
-      applyState(currentState);
-      // Pede ao servidor para arquivar e voltar ao selectQuiz
-      socket.emit('cmd', { pin: presenterPin, action: 'backToSelect' });
+    // Ao reconectar: se o quiz estiver em andamento, retoma de onde estava.
+    // Só vai pra selectQuiz se o servidor já estiver nessa fase.
+    if (!currentState && state.phase !== 'selectQuiz') {
+      // Quiz em andamento — retoma sem interferir
+      currentState = state;
+      applyState(state);
+      return;
+    }
+    if (!currentState && state.phase === 'selectQuiz') {
+      // Já estava em seleção — mostra normalmente
+      currentState = state;
+      applyState(state);
       return;
     }
     currentState = state;
