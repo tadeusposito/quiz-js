@@ -529,6 +529,15 @@ io.on('connection', (socket) => {
     saveSession();
     socket.emit('joined', buildPublicState());
     io.to('presenter').emit('presenterState', presenterFullState());
+    // Se estiver em reveal de questão aberta, sincroniza o celular que acabou de entrar
+    if (state.phase === 'reveal' && state.currentIndex >= 0) {
+      const q = state.activeQuestions[state.currentIndex];
+      if (q?.type === 'open') {
+        const extra = buildPresenterExtra();
+        const pageAnswers = (extra.openAnswers || []).slice(0, 3);
+        socket.emit('openPageSync', { page: state.openPage, openAnswers: pageAnswers });
+      }
+    }
   });
 
   socket.on('answer', ({ optionIndex }) => {
