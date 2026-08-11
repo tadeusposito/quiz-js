@@ -457,7 +457,8 @@ function buildPresenterExtra() {
     const qReactions = state.reactions[state.currentIndex] || {};
     Object.entries(state.answers).forEach(([key, ans]) => {
       if (key.endsWith(`_${state.currentIndex}`) && ans.fields !== undefined) {
-        const playerId = key.replace(`_${state.currentIndex}`, '');
+        const suffix = `_${state.currentIndex}`;
+        const playerId = key.slice(0, key.length - suffix.length);
         const p = state.participants[playerId];
         if (p) {
           const score = p.scores?.[qid]?.score || 0;
@@ -570,8 +571,8 @@ io.on('connection', (socket) => {
     const playerId = socket._playerId;
     const p = playerId && state.participants[playerId];
     if (!p || state.currentIndex < 0) return;
-    const q = state.activeQuestions?.[state.currentIndex];
-    if (!q || !['open','wordcloud'].includes(q.type)) return;
+    const q = state.activeQuestions[state.currentIndex];
+    if (!['open','wordcloud'].includes(q.type)) return;
     // open/wordcloud aceitam respostas tanto em 'question' quanto em 'reveal'
     if (!['question','reveal'].includes(state.phase)) return;
     const key = `${playerId}_${state.currentIndex}`;
@@ -585,7 +586,6 @@ io.on('connection', (socket) => {
     archiveCurrentQuiz();
     saveSession();
 
-    console.log(`Resposta aberta salva: ${playerId} / questão ${state.currentIndex} / campos: ${cleanFields.length}`);
     socket.emit('answerAck', { correct: null });
     io.to('presenter').emit('presenterExtra', buildPresenterExtra());
   });
@@ -789,7 +789,6 @@ io.on('connection', (socket) => {
       if (Object.keys(answers).length === 0) return;
       state.activeQuiz = qid;
       state.activeQuestions = state.questions.filter(q => q.quizId === qid);
-      console.log(`Retomando quiz ${qid}: ${state.activeQuestions.length} questões, ${Object.keys(answers).length} respostas`);
       state.answers   = answers;
       state.reactions = reactions;
       const answeredIndexes = Object.keys(answers)
