@@ -23,14 +23,22 @@
   #pin-screen button { padding: 12px 40px; font-size: 16px; font-weight: 700; border-radius: 10px; background: var(--azul); color: #fff; border: none; cursor: pointer; }
 
   /* SLIDE AREA */
-  #slide-area { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+  #slide-area {
+    flex: 1; position: relative; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 100%;
+  }
 
   /* PDF slide */
-  #pdf-canvas { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
-  canvas#pdf-canvas { width: 100% !important; height: 100% !important; object-fit: contain; }
+  #pdf-canvas { display: none; max-width: 100%; max-height: 100%; }
 
   /* Video slide */
-  /* video inline style */
+  #slide-video {
+    display: none;
+    width: 100%; height: 100%;
+    object-fit: contain;
+    background: #000;
+  }
 
   /* Question slide */
   #quiz-frame {
@@ -98,7 +106,7 @@
 <!-- SLIDE AREA -->
 <div id="slide-area">
   <canvas id="pdf-canvas"></canvas>
-  <video id="slide-video" controls playsinline style="max-width:100%;max-height:100%;display:none;"></video>
+  <video id="slide-video" controls playsinline></video>
   <iframe id="quiz-frame" src="" allow="autoplay"></iframe>
   <div id="waiting-slide">⏳ Aguardando…</div>
 </div>
@@ -220,15 +228,11 @@
   function renderVideoSlide(slide) {
     const video = document.getElementById('slide-video');
     video.style.display = 'block';
-    video.style.maxWidth = '100%';
-    video.style.maxHeight = '100%';
-    // Só troca src se for vídeo diferente
     if (video.dataset.src !== slide.videoUrl) {
       video.dataset.src = slide.videoUrl;
       video.src = slide.videoUrl;
       video.load();
     }
-    video.focus();
   }
 
   function renderQuizSlide(slide) {
