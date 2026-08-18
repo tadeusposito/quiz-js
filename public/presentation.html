@@ -30,7 +30,7 @@
   canvas#pdf-canvas { width: 100% !important; height: 100% !important; object-fit: contain; }
 
   /* Video slide */
-  #slide-video { max-width: 100%; max-height: 100%; object-fit: contain; display: none; }
+  /* video inline style */
 
   /* Question slide */
   #quiz-frame {
@@ -44,23 +44,34 @@
     gap: 20px; color: var(--accent); font-size: 24px; font-weight: 700;
   }
 
-  /* CONTROLS */
-  .controls {
-    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-    display: flex; gap: 12px; align-items: center; z-index: 50;
-    background: rgba(10,15,30,.85); backdrop-filter: blur(8px);
-    border: 1px solid var(--border); border-radius: 14px; padding: 10px 16px;
+  /* Setas de navegação laterais */
+  .nav-arrow {
+    position: fixed; top: 50%; transform: translateY(-50%);
+    width: 44px; height: 44px; border-radius: 50%;
+    background: rgba(255,255,255,.08); border: none;
+    color: rgba(255,255,255,.5); font-size: 20px;
+    cursor: pointer; z-index: 50; transition: all .2s;
+    display: flex; align-items: center; justify-content: center;
   }
-  .ctrl-btn {
-    padding: 10px 20px; font-size: 15px; font-weight: 700; border-radius: 10px;
-    border: none; cursor: pointer; transition: all .15s;
+  .nav-arrow:hover { background: rgba(255,255,255,.18); color: #fff; }
+  .nav-arrow:disabled { opacity: .15; cursor: not-allowed; }
+  .nav-arrow.left  { left: 12px; }
+  .nav-arrow.right { right: 12px; }
+
+  /* Indicador discreto */
+  .slide-indicator {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; color: rgba(255,255,255,.3); z-index: 50;
+    background: rgba(0,0,0,.4); padding: 4px 12px; border-radius: 20px;
   }
-  .btn-prev { background: var(--card); color: #7a9cc8; }
-  .btn-prev:disabled { opacity: .3; cursor: not-allowed; }
-  .btn-next { background: var(--azul); color: #fff; }
-  .btn-next:disabled { opacity: .3; cursor: not-allowed; }
-  .btn-quiz { background: var(--accent); color: #000; }
-  .slide-indicator { font-size: 13px; color: #7a9cc8; min-width: 80px; text-align: center; }
+
+  /* Botão quiz */
+  .btn-quiz {
+    position: fixed; bottom: 14px; right: 16px; z-index: 50;
+    padding: 8px 16px; font-size: 13px; font-weight: 700; border-radius: 20px;
+    border: none; cursor: pointer; background: var(--accent); color: #000;
+    display: none;
+  }
 
   /* Presenter frame overlay (quando em questão) */
   #presenter-overlay {
@@ -87,18 +98,16 @@
 <!-- SLIDE AREA -->
 <div id="slide-area">
   <canvas id="pdf-canvas"></canvas>
-  <video id="slide-video" controls></video>
+  <video id="slide-video" controls playsinline style="max-width:100%;max-height:100%;display:none;"></video>
   <iframe id="quiz-frame" src="" allow="autoplay"></iframe>
   <div id="waiting-slide">⏳ Aguardando…</div>
 </div>
 
-<!-- CONTROLS -->
-<div class="controls">
-  <button class="ctrl-btn btn-prev" id="btnPrev" onclick="navigate(-1)" disabled>◀ Anterior</button>
-  <span class="slide-indicator" id="slideIndicator">–</span>
-  <button class="ctrl-btn btn-next" id="btnNext" onclick="navigate(1)">Próximo ▶</button>
-  <button class="ctrl-btn btn-quiz" id="btnQuizCtrl" style="display:none;" onclick="toggleQuizPanel()">⚡ Quiz</button>
-</div>
+<!-- NAVEGAÇÃO -->
+<button class="nav-arrow left"  id="btnPrev" onclick="navigate(-1)" disabled>‹</button>
+<button class="nav-arrow right" id="btnNext" onclick="navigate(1)">›</button>
+<span class="slide-indicator" id="slideIndicator">–</span>
+<button class="btn-quiz" id="btnQuizCtrl" onclick="toggleQuizPanel()">⚡ Quiz</button>
 
 <!-- PRESENTER OVERLAY (controles do quiz quando em questão) -->
 <div id="presenter-overlay">
@@ -178,7 +187,8 @@
 
     // Oculta tudo
     document.getElementById('pdf-canvas').style.display = 'none';
-    document.getElementById('slide-video').style.display = 'none';
+    const vid = document.getElementById('slide-video');
+    vid.style.display = 'none'; try { vid.pause(); } catch(e) {}
     document.getElementById('quiz-frame').style.display = 'none';
     document.getElementById('waiting-slide').style.display = 'none';
     document.getElementById('btnQuizCtrl').style.display = 'none';
@@ -209,9 +219,16 @@
 
   function renderVideoSlide(slide) {
     const video = document.getElementById('slide-video');
-    video.src = slide.videoUrl;
     video.style.display = 'block';
-    video.load();
+    video.style.maxWidth = '100%';
+    video.style.maxHeight = '100%';
+    // Só troca src se for vídeo diferente
+    if (video.dataset.src !== slide.videoUrl) {
+      video.dataset.src = slide.videoUrl;
+      video.src = slide.videoUrl;
+      video.load();
+    }
+    video.focus();
   }
 
   function renderQuizSlide(slide) {
