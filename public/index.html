@@ -207,6 +207,13 @@
   <div id="revealBadge"></div>
 </div>
 
+<!-- SLIDE PASSIVO (durante slides PDF/vídeo) -->
+<div id="screen-slide" class="hidden" style="text-align:center;">
+  <div class="waiting-anim" style="margin:0 auto 20px;"></div>
+  <div class="participant-name" id="slideEventName"></div>
+  <p class="sub" id="slideSubtitle" style="margin-top:8px;">Acompanhe no telão</p>
+</div>
+
 <!-- REACTIONS -->
 <div id="screen-reactions" class="hidden">
   <div class="reactions-title" id="reactionsTitle">Reaja às respostas!</div>
@@ -258,7 +265,7 @@
   });
 
   function show(id) {
-    ['screen-join','screen-lobby','screen-question','screen-reactions','screen-ranking'].forEach(s => {
+    ['screen-join','screen-lobby','screen-question','screen-reactions','screen-ranking','screen-slide'].forEach(s => {
       document.getElementById(s).classList.toggle('hidden', s !== id);
     });
   }
@@ -336,11 +343,37 @@
 
   socket.on('state', applyState);
 
+  socket.on('slideSync', ({ index, isQuestion, questionId }) => {
+    if (isQuestion) {
+      // Slide de questão — volta para a tela normal do quiz
+      // o estado do quiz vai chegar via 'state' normalmente
+    } else {
+      // Slide passivo (PDF ou vídeo) — mostra tela de espera
+      if (myName) {
+        document.getElementById('slideEventName').textContent = myName;
+        show('screen-slide');
+      }
+    }
+  });
+
   socket.on('openPageSync', ({ page, openAnswers }) => {
     currentPageAnswers = openAnswers || [];
+    // Verificar se a própria pessoa já respondeu (está na lista)
+    if (myOpenText === null) {
+      const myEntry = openAnswers?.find(a => a.playerId === myPlayerId);
+      if (myEntry) {
+        // Servidor tem resposta, marca como respondido localmente
+        myOpenText = myEntry.fields || [myEntry.text || ''];
+      }
+    }
     // Se estiver na fase reveal de questão aberta, atualiza a tela de reações
-    if (currentState && currentState.phase === 'reveal' && currentState.question?.type === 'open') {
-      showReactionScreen(currentState);
+    if (currentState && currentState.phase === 'reveal' && ['open','wordcloud'].includes(currentState.question?.type)) {
+      if (myOpenText !== null) {
+        showReactionScreen(currentState);
+      } else {
+        // Ainda não respondeu — garante que está na tela de pergunta
+        show('screen-question');
+      }
     }
   });
 
@@ -405,8 +438,8 @@
       renderQuestion(state);
       show('screen-question');
     } else if (state.phase === 'reveal') {
-      if (state.question?.type === 'open') {
-        renderQuestion(state); // vai chamar showReactionScreen internamente
+      if (['open','wordcloud'].includes(state.question?.type)) {
+        renderQuestion(state); // vai chamar showReactionScreen se já respondeu
       } else {
         renderQuestion(state);
         show('screen-question');

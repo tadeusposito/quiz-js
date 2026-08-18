@@ -16,10 +16,31 @@ const PRESENTER_PIN = process.env.PRESENTER_PIN || '5678';
 // ── Diretório de dados persistentes ──────────────────────────────────────────
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, 'data');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
-const QUESTIONS_FILE = path.join(DATA_DIR, 'questions.json');
-const CONFIG_FILE    = path.join(DATA_DIR, 'config.json');
-const SESSION_FILE   = path.join(DATA_DIR, 'session.json');
+const QUESTIONS_FILE     = path.join(DATA_DIR, 'questions.json');
+const CONFIG_FILE        = path.join(DATA_DIR, 'config.json');
+const SESSION_FILE       = path.join(DATA_DIR, 'session.json');
+const PRESENTATION_FILE  = path.join(DATA_DIR, 'presentation.json');
+const SLIDES_DIR         = path.join(DATA_DIR, 'slides');
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+fs.mkdirSync(SLIDES_DIR,  { recursive: true });
+
+// ── Apresentação ──────────────────────────────────────────────────────────────
+// Uma apresentação é uma sequência de slides:
+// { id, type: 'pdf'|'video'|'question', ... }
+// pdf:      { pageIndex, pdfUrl, label }
+// video:    { videoUrl, videoType, label }
+// question: { questionId }
+function loadPresentation() {
+  try {
+    if (fs.existsSync(PRESENTATION_FILE))
+      return JSON.parse(fs.readFileSync(PRESENTATION_FILE, 'utf8'));
+  } catch (e) { console.error('Erro ao carregar presentation.json:', e.message); }
+  return { slides: [], pdfUrl: null, pdfPages: 0 };
+}
+function savePresentation(pres) {
+  try { fs.writeFileSync(PRESENTATION_FILE, JSON.stringify(pres, null, 2), 'utf8'); }
+  catch (e) { console.error('Erro ao salvar presentation.json:', e.message); }
+}
 
 // ── Persistência de sessão ────────────────────────────────────────────────────
 function loadSession() {
@@ -135,6 +156,13 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 150 * 1024 * 1024 } });
 const uploadFields = upload.fields([{ name: 'media', maxCount: 1 }, { name: 'revealMedia', maxCount: 1 }]);
 
+// Multer para apresentação
+const slideStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, SLIDES_DIR),
+  filename: (req, file, cb) => cb(null, `slide_${Date.now()}${path.extname(file.originalname)}`)
+});
+const uploadSlide = multer({ storage: slideStorage, limits: { fileSize: 500 * 1024 * 1024 } });
+
 // ── Estado global ─────────────────────────────────────────────────────────────
 const _session = loadSession();
 
@@ -144,6 +172,7 @@ const _quizData = _session?.quizData || {};
 
 const state = {
   questions:    loadQuestions(),
+  presentation: loadPresentation(),
   config:       loadConfig(),
   quizData:     _quizData,          // respostas permanentes por quiz
   activeQuiz:   _session?.activeQuiz   ?? null,
@@ -168,9 +197,12 @@ if (_session) console.log(`Sessão restaurada: fase=${state.phase}, quiz=${state
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(UPLOADS_DIR));
+app.use('/slides', express.static(SLIDES_DIR));
 
 app.get('/presenter', (req, res) => res.sendFile(path.join(__dirname, 'public', 'presenter.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+app.get('/presentation', (req, res) => res.sendFile(path.join(__dirname, 'public', 'presentation.html')));
+app.get('/presentation-admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'presentation-admin.html')));
 
 // ── Admin API ─────────────────────────────────────────────────────────────────
 
@@ -368,6 +400,75 @@ app.post('/api/questions/reorder', (req, res) => {
 });
 
 // Reset total — apaga participantes e volta à seleção de quiz
+// ── API de Apresentação ──────────────────────────────────────────────────────
+
+// Obter apresentação atual
+app.get('/api/presentation', (req, res) => {
+  if (req.query.pin !== ADMIN_PIN && req.query.pin !== PRESENTER_PIN)
+    return res.status(401).json({ error: 'Não autorizado' });
+  res.json(state.presentation);
+});
+
+// Upload do PDF da apresentação
+app.post('/api/presentation/pdf', uploadSlide.single('pdf'), (req, res) => {
+  if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
+  if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+  // Remove PDF anterior
+  if (state.presentation.pdfUrl) {
+    const old = path.join(SLIDES_DIR, path.basename(state.presentation.pdfUrl));
+    if (fs.existsSync(old)) try { fs.unlinkSync(old); } catch(e) {}
+  }
+  state.presentation.pdfUrl = `/slides/${req.file.filename}`;
+  state.presentation.pdfPages = parseInt(req.body.pageCount || '0', 10);
+  // Gerar sequência inicial de slides PDF
+  state.presentation.slides = Array.from({ length: state.presentation.pdfPages }, (_, i) => ({
+    id: `pdf_${i}`,
+    type: 'pdf',
+    pageIndex: i,
+    label: `Slide ${i + 1}`,
+  }));
+  savePresentation(state.presentation);
+  io.emit('presentationUpdate', state.presentation);
+  res.json({ ok: true, presentation: state.presentation });
+});
+
+// Upload de vídeo para inserir na apresentação
+app.post('/api/presentation/video', uploadSlide.single('video'), (req, res) => {
+  if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
+  if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+  const slide = {
+    id: `video_${Date.now()}`,
+    type: 'video',
+    videoUrl: `/slides/${req.file.filename}`,
+    videoType: req.file.mimetype,
+    label: req.body.label || 'Vídeo',
+  };
+  res.json({ ok: true, slide });
+});
+
+// Salvar sequência de slides (após reordenação/edição no admin)
+app.post('/api/presentation/slides', (req, res) => {
+  if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
+  state.presentation.slides = req.body.slides;
+  savePresentation(state.presentation);
+  io.emit('presentationUpdate', state.presentation);
+  res.json({ ok: true });
+});
+
+// Deletar slide (vídeo ou remover da sequência)
+app.delete('/api/presentation/slides/:id', (req, res) => {
+  if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
+  const idx = state.presentation.slides.findIndex(s => s.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Não encontrado' });
+  const [removed] = state.presentation.slides.splice(idx, 1);
+  if (removed.type === 'video' && removed.videoUrl) {
+    const fp = path.join(SLIDES_DIR, path.basename(removed.videoUrl));
+    if (fs.existsSync(fp)) try { fs.unlinkSync(fp); } catch(e) {}
+  }
+  savePresentation(state.presentation);
+  res.json({ ok: true });
+});
+
 app.post('/api/reset', (req, res) => {
   if (req.body.pin !== ADMIN_PIN) return res.status(401).json({ error: 'Não autorizado' });
   state.activeQuiz = null;
@@ -662,6 +763,18 @@ io.on('connection', (socket) => {
     if (pin !== PRESENTER_PIN) return socket.emit('presenterError', 'PIN inválido');
     socket.join('presenter');
     socket.emit('presenterState', presenterFullState());
+    socket.emit('presentationUpdate', state.presentation);
+  });
+
+  // Controle de navegação da apresentação (slide atual)
+  socket.on('slideNav', ({ pin, index }) => {
+    if (pin !== PRESENTER_PIN) return;
+    state.presentation.currentSlide = index;
+    const slide = state.presentation.slides?.[index];
+    // Informa celulares: em questão = aguardar, senão = slide passivo
+    const isQuestion = slide?.type === 'question';
+    io.emit('slideSync', { index, isQuestion, questionId: slide?.questionId || null });
+    io.to('presenter').emit('slideSync', { index, isQuestion, questionId: slide?.questionId || null });
   });
 
   socket.on('cmd', ({ pin, action, quizId }) => {

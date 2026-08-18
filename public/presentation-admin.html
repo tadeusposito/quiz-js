@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apresentação – Admin</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d1520; --card: #101c30; --border: #1e3060;
+    --azul: #1e5dbf; --accent: #c8a84b; --text: #f0f0f0;
+    --danger: #f44336; --success: #4caf50;
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  /* AUTH */
+  #auth-screen {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; z-index: 100;
+  }
+  #auth-screen h2 { color: var(--accent); font-size: 22px; }
+  #auth-screen input {
+    padding: 12px 20px; font-size: 18px; border-radius: 10px;
+    border: 2px solid var(--azul); background: var(--card); color: #fff;
+    text-align: center; letter-spacing: 6px; outline: none;
+  }
+  #auth-screen button { padding: 12px 36px; font-size: 15px; font-weight: 700; border-radius: 10px; background: var(--azul); color: #fff; border: none; cursor: pointer; }
+  #auth-error { color: var(--danger); font-size: 14px; }
+
+  /* LAYOUT */
+  .page { display: flex; height: 100vh; overflow: hidden; }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 280px; background: #090f1e; border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; padding: 20px; gap: 16px; flex-shrink: 0; overflow-y: auto;
+  }
+  .sidebar h2 { font-size: 15px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: 10px; padding: 16px;
+    text-align: center; cursor: pointer; transition: border-color .2s; color: #5a82b8; font-size: 13px;
+  }
+  .upload-zone:hover { border-color: var(--azul); color: #fff; }
+  .upload-zone input { display: none; }
+
+  .pdf-info { background: var(--card); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #7a9cc8; }
+  .pdf-info strong { color: #fff; }
+
+  /* Questões disponíveis */
+  .q-item-small {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; font-size: 13px; cursor: grab; transition: all .15s;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .q-item-small:hover { border-color: var(--azul); }
+  .q-item-small .q-type { font-size: 16px; flex-shrink: 0; }
+  .q-item-small .q-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .btn { padding: 9px 18px; font-size: 13px; font-weight: 700; border-radius: 8px; border: none; cursor: pointer; transition: all .15s; }
+  .btn-primary { background: var(--azul); color: #fff; width: 100%; }
+  .btn-primary:hover { filter: brightness(1.15); }
+  .btn-danger { background: #3a1a1a; color: var(--danger); }
+  .btn-success { background: #1a3a1a; color: var(--success); }
+
+  /* MAIN — sequência de slides */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .main-header {
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+  }
+  .main-header h1 { font-size: 18px; color: var(--accent); flex: 1; }
+
+  .slides-area { flex: 1; overflow-y: auto; padding: 20px 24px; }
+  .slides-list { display: flex; flex-direction: column; gap: 10px; }
+
+  /* Slide card */
+  .slide-card {
+    background: var(--card); border: 2px solid var(--border); border-radius: 12px;
+    display: flex; align-items: stretch; gap: 0; cursor: grab; transition: border-color .15s;
+    user-select: none;
+  }
+  .slide-card:hover { border-color: var(--azul); }
+  .slide-card.drag-over { border-color: var(--accent); border-style: dashed; }
+  .slide-card.dragging { opacity: .4; }
+
+  .slide-thumb {
+    width: 120px; flex-shrink: 0; background: #000; border-radius: 10px 0 0 10px;
+    overflow: hidden; display: flex; align-items: center; justify-content: center;
+    font-size: 32px; min-height: 72px;
+  }
+  .slide-thumb canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .slide-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+  .slide-body { flex: 1; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
+  .slide-num { font-size: 11px; color: #5a82b8; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+  .slide-label { font-size: 15px; font-weight: 600; }
+  .slide-meta { font-size: 12px; color: #7a9cc8; }
+
+  .slide-actions { display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 10px; }
+  .slide-actions button { padding: 6px 10px; font-size: 12px; border-radius: 6px; border: none; cursor: pointer; }
+  .btn-del-slide { background: #3a1a1a; color: var(--danger); }
+  .btn-up-slide, .btn-dn-slide { background: #101e35; color: #7a9cc8; }
+
+  /* Drop zone entre slides */
+  .drop-zone {
+    height: 6px; border-radius: 3px; background: transparent; transition: all .15s;
+    position: relative;
+  }
+  .drop-zone.active { height: 32px; background: rgba(30,93,191,.2); border: 2px dashed var(--azul); border-radius: 8px; }
+  .drop-zone.active::after { content: '+ Soltar aqui'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--azul); }
+
+  /* Video upload inline */
+  .add-video-btn {
+    padding: 8px 16px; font-size: 13px; border-radius: 8px;
+    border: 1px dashed var(--border); background: transparent; color: #5a82b8; cursor: pointer;
+    transition: all .15s; width: 100%;
+  }
+  .add-video-btn:hover { border-color: var(--azul); color: #fff; }
+
+  /* Status */
+  .status { padding: 8px 14px; border-radius: 8px; font-size: 13px; margin-top: 8px; }
+  .status-ok { background: #1a4a1a; color: var(--success); }
+  .status-err { background: #4a1a1a; color: var(--danger); }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: #3a5a80; font-size: 15px; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="auth-screen">
+  <h2>🎬 Admin – Apresentação</h2>
+  <input type="password" id="pinIn" placeholder="PIN Admin" maxlength="8" />
+  <button onclick="doAuth()">Entrar</button>
+  <div id="auth-error"></div>
+</div>
+
+<div class="page hidden" id="main-page">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div>
+      <h2>📄 PDF da apresentação</h2>
+      <div class="upload-zone" id="pdfZone" onclick="document.getElementById('pdfFile').click()">
+        <input type="file" id="pdfFile" accept=".pdf" onchange="uploadPDF(this)">
+        <span id="pdfLabel">Clique para subir o PDF</span>
+      </div>
+      <div class="pdf-info hidden" id="pdfInfo"></div>
+      <div id="pdfStatus"></div>
+    </div>
+
+    <div>
+      <h2>🎬 Adicionar vídeo</h2>
+      <div class="upload-zone" id="videoZone" onclick="document.getElementById('videoFile').click()">
+        <input type="file" id="videoFile" accept="video/*" onchange="uploadVideo(this)">
+        <span id="videoLabel">Clique para subir vídeo</span>
+      </div>
+      <div id="videoStatus"></div>
+      <p style="font-size:12px;color:#5a82b8;margin-top:6px;">O vídeo será adicionado ao final — arraste para reposicionar.</p>
+    </div>
+
+    <div>
+      <h2>📋 Quizes disponíveis</h2>
+      <div id="quizList" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;"></div>
+      <p style="font-size:12px;color:#5a82b8;margin-top:6px;">Arraste para inserir o quiz completo na sequência.</p>
+    </div>
+
+    <div style="margin-top:auto;">
+      <button class="btn btn-success" onclick="saveSlides()" style="width:100%;margin-bottom:8px;">💾 Salvar sequência</button>
+      <button class="btn btn-primary" onclick="window.open('/presentation','_blank')">🖥 Abrir Presenter</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="main-header">
+      <h1>Sequência da Apresentação</h1>
+      <span id="slideCount" style="font-size:13px;color:#5a82b8;"></span>
+    </div>
+    <div class="slides-area">
+      <div class="slides-list" id="slidesList">
+        <div class="empty-state">Suba um PDF para começar.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  let adminPin = '';
+  let slides = [];
+  let questions = [];
+  let pdfDoc = null;
+  let dragSrc = null;
+
+  // ── AUTH ────────────────────────────────────────────────────────────────────
+  async function doAuth() {
+    adminPin = document.getElementById('pinIn').value;
+    const r = await fetch('/api/auth', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: adminPin, role: 'admin' })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById('auth-screen').classList.add('hidden');
+      document.getElementById('main-page').classList.remove('hidden');
+      await loadAll();
+    } else {
+      document.getElementById('auth-error').textContent = 'PIN incorreto.';
+    }
+  }
+  document.getElementById('pinIn').addEventListener('keydown', e => { if (e.key === 'Enter') doAuth(); });
+
+  let eventConfig = { quizNames: {} };
+
+  async function loadAll() {
+    const [presRes, qRes, cfgRes] = await Promise.all([
+      fetch(`/api/presentation?pin=${adminPin}`),
+      fetch(`/api/questions?pin=${adminPin}`),
+      fetch('/api/config')
+    ]);
+    const pres = await presRes.json();
+    questions = await qRes.json();
+    eventConfig = await cfgRes.json();
+    slides = pres.slides || [];
+    if (pres.pdfUrl) {
+      document.getElementById('pdfLabel').textContent = '✅ ' + pres.pdfUrl.split('/').pop();
+      document.getElementById('pdfInfo').textContent = `${pres.pdfPages} slides carregados`;
+      document.getElementById('pdfInfo').classList.remove('hidden');
+      loadPdfDoc(pres.pdfUrl);
+    }
+    renderQuizList();
+    renderSlides();
+  }
+
+  // ── PDF ─────────────────────────────────────────────────────────────────────
+  async function loadPdfDoc(url) {
+    try {
+      pdfDoc = await pdfjsLib.getDocument(url).promise;
+      renderSlides(); // re-render com miniaturas
+    } catch(e) { console.error('Erro ao carregar PDF:', e); }
+  }
+
+  async function renderPdfThumb(pageIndex, canvas) {
+    if (!pdfDoc) return;
+    try {
+      const page = await pdfDoc.getPage(pageIndex + 1);
+      const vp = page.getViewport({ scale: 0.3 });
+      canvas.width = vp.width; canvas.height = vp.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+    } catch(e) {}
+  }
+
+  async function uploadPDF(input) {
+    const file = input.files[0];
+    if (!file) return;
+    document.getElementById('pdfLabel').textContent = '⏳ Contando páginas…';
+    // Contar páginas localmente antes de subir
+    const buf = await file.arrayBuffer();
+    const tmpDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+    const pageCount = tmpDoc.numPages;
+    document.getElementById('pdfLabel').textContent = `⏳ Subindo ${pageCount} slides…`;
+
+    const fd = new FormData();
+    fd.append('pin', adminPin);
+    fd.append('pdf', file);
+    fd.append('pageCount', pageCount);
+    const r = await fetch('/api/presentation/pdf', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      slides = d.presentation.slides;
+      document.getElementById('pdfLabel').textContent = '✅ ' + file.name;
+      document.getElementById('pdfInfo').textContent = `${pageCount} slides carregados`;
+      document.getElementById('pdfInfo').classList.remove('hidden');
+      pdfDoc = tmpDoc;
+      renderSlides();
+      showStatus('pdfStatus', '✅ PDF carregado!', true);
+    } else {
+      showStatus('pdfStatus', 'Erro ao subir PDF.', false);
+    }
+  }
+
+  async function uploadVideo(input) {
+    const file = input.files[0];
+    if (!file) return;
+    document.getElementById('videoLabel').textContent = '⏳ Subindo vídeo…';
+    const fd = new FormData();
+    fd.append('pin', adminPin);
+    fd.append('video', file);
+    fd.append('label', file.name.replace(/\.[^.]+$/, ''));
+    const r = await fetch('/api/presentation/video', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      slides.push(d.slide);
+      document.getElementById('videoLabel').textContent = '📎 Subir vídeo';
+      document.getElementById('videoFile').value = '';
+      renderSlides();
+      showStatus('videoStatus', '✅ Vídeo adicionado!', true);
+    } else {
+      showStatus('videoStatus', 'Erro ao subir vídeo.', false);
+    }
+  }
+
+  // ── QUESTÕES ────────────────────────────────────────────────────────────────
+  const typeIcon = { multiple: '📋', poll: '📊', open: '✏️', wordcloud: '☁️' };
+
+  function renderQuizList() {
+    const list = document.getElementById('quizList');
+    list.innerHTML = '';
+    // Agrupar questões por quiz (1-5)
+    const quizIds = [...new Set(questions.map(q => q.quizId).filter(id => id !== null && id !== undefined))];
+    if (!quizIds.length) {
+      list.innerHTML = '<div style="font-size:13px;color:#5a82b8;">Nenhum quiz com questões designadas.</div>';
+      return;
+    }
+    quizIds.sort((a,b) => a - b).forEach(qid => {
+      const qs = questions.filter(q => q.quizId === qid);
+      const name = eventConfig.quizNames?.[qid] || `Quiz ${qid}`;
+      const el = document.createElement('div');
+      el.className = 'q-item-small';
+      el.draggable = true;
+      el.innerHTML = `<span class="q-type">📋</span>
+        <span class="q-text"><strong>${name}</strong><br><span style="font-size:11px;color:#7a9cc8;">${qs.length} questão${qs.length!==1?'ões':''}</span></span>`;
+      el.addEventListener('dragstart', e => {
+        dragSrc = { source: 'quiz', quizId: qid, name, count: qs.length };
+        e.dataTransfer.effectAllowed = 'copy';
+      });
+      list.appendChild(el);
+    });
+  }
+
+  // ── SLIDES ──────────────────────────────────────────────────────────────────
+  function renderSlides() {
+    const list = document.getElementById('slidesList');
+    document.getElementById('slideCount').textContent = `${slides.length} slides`;
+    if (!slides.length) {
+      list.innerHTML = '<div class="empty-state">Suba um PDF para começar.</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    slides.forEach((slide, i) => {
+      // Drop zone before each slide
+      list.appendChild(makeDropZone(i));
+
+      const card = document.createElement('div');
+      card.className = 'slide-card';
+      card.draggable = true;
+      card.dataset.idx = i;
+
+      // Thumb
+      const thumb = document.createElement('div');
+      thumb.className = 'slide-thumb';
+      if (slide.type === 'pdf') {
+        const canvas = document.createElement('canvas');
+        thumb.appendChild(canvas);
+        renderPdfThumb(slide.pageIndex, canvas);
+      } else if (slide.type === 'video') {
+        thumb.textContent = '🎬';
+      } else if (slide.type === 'quiz') {
+        thumb.textContent = '📋';
+      }
+
+      // Body
+      const body = document.createElement('div');
+      body.className = 'slide-body';
+      const typeLabel = slide.type === 'pdf' ? `Slide PDF (pág. ${slide.pageIndex + 1})`
+        : slide.type === 'video' ? 'Vídeo'
+        : slide.type === 'quiz' ? `Quiz: ${slide.label} (${slide.questionCount} questões)`
+        : 'Slide';
+      body.innerHTML = `<div class="slide-num">${i + 1} de ${slides.length}</div>
+        <div class="slide-label">${slide.label || typeLabel}</div>
+        <div class="slide-meta">${typeLabel}</div>`;
+
+      // Actions
+      const actions = document.createElement('div');
+      actions.className = 'slide-actions';
+      actions.innerHTML = `
+        <button class="btn-up-slide" onclick="moveSlide(${i},-1)" ${i===0?'disabled':''}>▲</button>
+        <button class="btn-dn-slide" onclick="moveSlide(${i},1)" ${i===slides.length-1?'disabled':''}>▼</button>
+        <button class="btn-del-slide" onclick="deleteSlide(${i}, '${slide.id}')">🗑</button>`;
+
+      card.appendChild(thumb);
+      card.appendChild(body);
+      card.appendChild(actions);
+
+      // Drag events (reordenar)
+      card.addEventListener('dragstart', e => {
+        dragSrc = { source: 'slide', idx: i };
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      card.addEventListener('dragend', () => card.classList.remove('dragging'));
+
+      list.appendChild(card);
+    });
+    // Drop zone final
+    list.appendChild(makeDropZone(slides.length));
+  }
+
+  function makeDropZone(afterIdx) {
+    const dz = document.createElement('div');
+    dz.className = 'drop-zone';
+    dz.dataset.after = afterIdx;
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('active'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('active'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('active');
+      handleDrop(afterIdx);
+    });
+    return dz;
+  }
+
+  function handleDrop(afterIdx) {
+    if (!dragSrc) return;
+    if (dragSrc.source === 'quiz') {
+      // Inserir quiz completo como um slide
+      const slide = {
+        id: `quiz_${dragSrc.quizId}_${Date.now()}`,
+        type: 'quiz',
+        quizId: dragSrc.quizId,
+        label: dragSrc.name,
+        questionCount: dragSrc.count,
+      };
+      slides.splice(afterIdx, 0, slide);
+    } else if (dragSrc.source === 'slide') {
+      // Mover slide existente
+      const [moved] = slides.splice(dragSrc.idx, 1);
+      const insertAt = afterIdx > dragSrc.idx ? afterIdx - 1 : afterIdx;
+      slides.splice(insertAt, 0, moved);
+    }
+    dragSrc = null;
+    renderSlides();
+  }
+
+  function moveSlide(idx, dir) {
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= slides.length) return;
+    [slides[idx], slides[newIdx]] = [slides[newIdx], slides[idx]];
+    renderSlides();
+  }
+
+  async function deleteSlide(idx, id) {
+    slides.splice(idx, 1);
+    // Se for vídeo, apaga do servidor
+    const slide = slides[idx];
+    if (slide?.type === 'video') {
+      await fetch(`/api/presentation/slides/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: adminPin })
+      });
+    }
+    renderSlides();
+  }
+
+  async function saveSlides() {
+    const r = await fetch('/api/presentation/slides', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: adminPin, slides })
+    });
+    const d = await r.json();
+    showStatus(null, d.ok ? '✅ Sequência salva!' : 'Erro ao salvar.', d.ok, true);
+  }
+
+  function showStatus(id, msg, ok, toast = false) {
+    if (toast) {
+      const el = document.createElement('div');
+      el.className = `status ${ok ? 'status-ok' : 'status-err'}`;
+      el.textContent = msg;
+      el.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;';
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 2500);
+      return;
+    }
+    if (!id) return;
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = `<div class="status ${ok ? 'status-ok' : 'status-err'}">${msg}</div>`;
+    if (ok) setTimeout(() => el.innerHTML = '', 3000);
+  }
+</script>
+</body>
+</html>

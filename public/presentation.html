@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apresentação</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --bg:#0d1520; --card:#101c30; --border:#1e3060; --azul:#1e5dbf; --accent:#c8a84b; --text:#f0f0f0; }
+  body { background: #000; color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* PIN */
+  #pin-screen {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 100;
+  }
+  #pin-screen h2 { color: var(--accent); font-size: 24px; }
+  #pin-screen input {
+    padding: 14px 20px; font-size: 20px; border-radius: 10px;
+    border: 2px solid var(--azul); background: var(--card); color: #fff;
+    text-align: center; letter-spacing: 6px; outline: none; width: 200px;
+  }
+  #pin-screen button { padding: 12px 40px; font-size: 16px; font-weight: 700; border-radius: 10px; background: var(--azul); color: #fff; border: none; cursor: pointer; }
+
+  /* SLIDE AREA */
+  #slide-area { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+
+  /* PDF slide */
+  #pdf-canvas { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+  canvas#pdf-canvas { width: 100% !important; height: 100% !important; object-fit: contain; }
+
+  /* Video slide */
+  #slide-video { max-width: 100%; max-height: 100%; object-fit: contain; display: none; }
+
+  /* Question slide */
+  #quiz-frame {
+    width: 100%; height: 100%; border: none; display: none;
+    background: var(--bg);
+  }
+
+  /* Waiting slide */
+  #waiting-slide {
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 20px; color: var(--accent); font-size: 24px; font-weight: 700;
+  }
+
+  /* CONTROLS */
+  .controls {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 12px; align-items: center; z-index: 50;
+    background: rgba(10,15,30,.85); backdrop-filter: blur(8px);
+    border: 1px solid var(--border); border-radius: 14px; padding: 10px 16px;
+  }
+  .ctrl-btn {
+    padding: 10px 20px; font-size: 15px; font-weight: 700; border-radius: 10px;
+    border: none; cursor: pointer; transition: all .15s;
+  }
+  .btn-prev { background: var(--card); color: #7a9cc8; }
+  .btn-prev:disabled { opacity: .3; cursor: not-allowed; }
+  .btn-next { background: var(--azul); color: #fff; }
+  .btn-next:disabled { opacity: .3; cursor: not-allowed; }
+  .btn-quiz { background: var(--accent); color: #000; }
+  .slide-indicator { font-size: 13px; color: #7a9cc8; min-width: 80px; text-align: center; }
+
+  /* Presenter frame overlay (quando em questão) */
+  #presenter-overlay {
+    position: fixed; right: 0; top: 0; bottom: 0; width: 260px;
+    background: rgba(10,15,30,.95); border-left: 1px solid var(--border);
+    display: none; flex-direction: column; z-index: 40; overflow-y: auto; padding: 16px;
+  }
+  #presenter-overlay.visible { display: flex; }
+  .overlay-title { font-size: 13px; color: var(--accent); font-weight: 700; text-transform: uppercase; margin-bottom: 12px; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- PIN -->
+<div id="pin-screen">
+  <h2 id="pinTitle">Apresentação</h2>
+  <input type="password" id="pinInput" placeholder="PIN" maxlength="8" />
+  <button onclick="authPresenter()">Entrar</button>
+  <div id="pin-error" style="color:#f44336;font-size:14px;"></div>
+</div>
+
+<!-- SLIDE AREA -->
+<div id="slide-area">
+  <canvas id="pdf-canvas"></canvas>
+  <video id="slide-video" controls></video>
+  <iframe id="quiz-frame" src="" allow="autoplay"></iframe>
+  <div id="waiting-slide">⏳ Aguardando…</div>
+</div>
+
+<!-- CONTROLS -->
+<div class="controls">
+  <button class="ctrl-btn btn-prev" id="btnPrev" onclick="navigate(-1)" disabled>◀ Anterior</button>
+  <span class="slide-indicator" id="slideIndicator">–</span>
+  <button class="ctrl-btn btn-next" id="btnNext" onclick="navigate(1)">Próximo ▶</button>
+  <button class="ctrl-btn btn-quiz" id="btnQuizCtrl" style="display:none;" onclick="toggleQuizPanel()">⚡ Quiz</button>
+</div>
+
+<!-- PRESENTER OVERLAY (controles do quiz quando em questão) -->
+<div id="presenter-overlay">
+  <div class="overlay-title">Controles do Quiz</div>
+  <iframe id="presenter-mini" src="/presenter" style="flex:1;border:none;border-radius:8px;" title="presenter"></iframe>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  const socket = io();
+  let presenterPin = '';
+  let presentation = { slides: [], pdfUrl: null };
+  let pdfDoc = null;
+  let currentIdx = 0;
+  let quizPanelOpen = false;
+
+  // ── AUTH ────────────────────────────────────────────────────────────────────
+  async function authPresenter() {
+    presenterPin = document.getElementById('pinInput').value;
+    const r = await fetch('/api/auth', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: presenterPin, role: 'presenter' })
+    });
+    const d = await r.json();
+    if (!d.ok) { document.getElementById('pin-error').textContent = 'PIN inválido.'; return; }
+
+    document.getElementById('pin-screen').style.display = 'none';
+
+    // Carregar config e apresentação
+    const [cfgRes, presRes] = await Promise.all([
+      fetch('/api/config'),
+      fetch(`/api/presentation?pin=${presenterPin}`)
+    ]);
+    const cfg = await cfgRes.json();
+    const pres = await presRes.json();
+
+    if (cfg.eventName) { document.title = cfg.eventName; document.getElementById('pinTitle').textContent = cfg.eventName; }
+
+    presentation = pres;
+    if (pres.pdfUrl) {
+      pdfDoc = await pdfjsLib.getDocument(pres.pdfUrl).promise;
+    }
+    renderSlide(currentIdx);
+  }
+  document.getElementById('pinInput').addEventListener('keydown', e => { if (e.key === 'Enter') authPresenter(); });
+
+  // ── NAVEGAÇÃO ────────────────────────────────────────────────────────────────
+  async function navigate(dir) {
+    const newIdx = currentIdx + dir;
+    if (newIdx < 0 || newIdx >= presentation.slides.length) return;
+    currentIdx = newIdx;
+    // Sincroniza celulares
+    const slide = presentation.slides[currentIdx];
+    socket.emit('slideNav', { pin: presenterPin, index: currentIdx });
+    renderSlide(currentIdx);
+  }
+
+  // Teclado: ← → Espaço
+  document.addEventListener('keydown', e => {
+    if (['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); navigate(1); }
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); navigate(-1); }
+  });
+
+  async function renderSlide(idx) {
+    const slides = presentation.slides;
+    if (!slides.length) return;
+    const slide = slides[idx];
+
+    // Atualiza indicador e botões
+    document.getElementById('slideIndicator').textContent = `${idx + 1} / ${slides.length}`;
+    document.getElementById('btnPrev').disabled = idx === 0;
+    document.getElementById('btnNext').disabled = idx === slides.length - 1;
+
+    // Oculta tudo
+    document.getElementById('pdf-canvas').style.display = 'none';
+    document.getElementById('slide-video').style.display = 'none';
+    document.getElementById('quiz-frame').style.display = 'none';
+    document.getElementById('waiting-slide').style.display = 'none';
+    document.getElementById('btnQuizCtrl').style.display = 'none';
+
+    if (slide.type === 'pdf') {
+      await renderPdfSlide(slide.pageIndex);
+    } else if (slide.type === 'video') {
+      renderVideoSlide(slide);
+    } else if (slide.type === 'quiz') {
+      renderQuizSlide(slide);
+    }
+  }
+
+  async function renderPdfSlide(pageIndex) {
+    if (!pdfDoc) return;
+    const canvas = document.getElementById('pdf-canvas');
+    canvas.style.display = 'block';
+    const page = await pdfDoc.getPage(pageIndex + 1);
+    const container = document.getElementById('slide-area');
+    const scale = Math.min(
+      container.clientWidth / page.getViewport({ scale: 1 }).width,
+      container.clientHeight / page.getViewport({ scale: 1 }).height
+    );
+    const vp = page.getViewport({ scale });
+    canvas.width = vp.width; canvas.height = vp.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+  }
+
+  function renderVideoSlide(slide) {
+    const video = document.getElementById('slide-video');
+    video.src = slide.videoUrl;
+    video.style.display = 'block';
+    video.load();
+  }
+
+  function renderQuizSlide(slide) {
+    // Seleciona o quiz no servidor e abre o presenter lateral
+    socket.emit('cmd', { pin: presenterPin, action: 'selectQuiz', quizId: slide.quizId });
+    document.getElementById('waiting-slide').style.display = 'flex';
+    document.getElementById('waiting-slide').innerHTML = `
+      <div style="font-size:48px;margin-bottom:16px;">📋</div>
+      <div style="font-size:24px;font-weight:800;color:var(--accent);">${slide.label}</div>
+      <div style="font-size:14px;color:#7a9cc8;margin-top:8px;">${slide.questionCount} questões</div>`;
+    document.getElementById('btnQuizCtrl').style.display = 'block';
+    document.getElementById('btnQuizCtrl').textContent = '⚡ Controlar Quiz';
+    if (!quizPanelOpen) toggleQuizPanel();
+  }
+
+  function toggleQuizPanel() {
+    quizPanelOpen = !quizPanelOpen;
+    const overlay = document.getElementById('presenter-overlay');
+    overlay.classList.toggle('visible', quizPanelOpen);
+  }
+
+  // Recebe sync de slides de outros clientes
+  socket.on('slideSync', ({ index }) => {
+    if (index !== currentIdx) { currentIdx = index; renderSlide(currentIdx); }
+  });
+
+  socket.on('presentationUpdate', pres => {
+    presentation = pres;
+  });
+</script>
+</body>
+</html>
