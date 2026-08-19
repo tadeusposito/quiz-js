@@ -164,10 +164,14 @@
   <!-- Direita: controles -->
   <div id="quiz-controls">
     <div class="qctrl-section">Controles</div>
-    <button class="qctrl-btn qctrl-next"   id="qbtnNext"   onclick="qcmd('next')">▶ Próxima Questão</button>
+    <div style="display:flex;gap:6px;">
+      <button id="qbtnPrev" onclick="qcmd('prev')" style="background:#101e35;color:#7a9cc8;flex:0 0 44px;padding:14px 0;font-size:18px;border:none;border-radius:10px;cursor:pointer;" title="Questão anterior">◀</button>
+      <button class="qctrl-btn qctrl-next" id="qbtnNext" onclick="qbtnNextAction()" style="flex:1;">▶ Próxima Questão</button>
+    </div>
     <button class="qctrl-btn qctrl-reveal" id="qbtnReveal" onclick="qcmd('reveal')" disabled>👁 Revelar Resposta</button>
-    <button class="qctrl-btn qctrl-back"   onclick="qcmd('backToSelect')">← Trocar Quiz</button>
-    <button class="qctrl-btn qctrl-reset"  onclick="if(confirm('Reset total?')) qcmd('lobby')">↺ Reset Total</button>
+    <button class="qctrl-btn" id="qbtnReactionRanking" onclick="qshowReactionRanking()" style="background:#2a1a40;color:#c084fc;display:none;">💬 Ranking de Reações</button>
+    <button class="qctrl-btn qctrl-back" id="qbtnBackSelect" onclick="qcmd('backToSelect')">← Trocar Quiz</button>
+    <button class="qctrl-btn qctrl-reset" onclick="if(confirm('Reset total?')) qcmd('lobby')">↺ Reset Total</button>
     <div style="margin-top:8px;">
       <div class="qctrl-section">Respostas</div>
       <div class="qctrl-stat"><strong id="qAnswerCount">0</strong> de <span id="qAnswerTotal">0</span> responderam</div>
@@ -323,12 +327,59 @@
     document.getElementById('slideIndicator').style.display = '';
   }
 
+  function qbtnNextAction() {
+    if (quizState?.phase === 'finished') qcmd('ranking');
+    else if (quizState?.phase === 'ranking') qcmd('backToSelect');
+    else qcmd('next');
+  }
+
+  function qshowReactionRanking() {
+    socket.emit('reactionRanking', { pin: presenterPinCached });
+  }
+
+  function updateQControls(state) {
+    const isQuestion = state.phase === 'question';
+    const isFinished = state.phase === 'finished';
+    const isRanking  = state.phase === 'ranking';
+    const isSelectQuiz = state.phase === 'selectQuiz';
+
+    document.getElementById('qbtnReveal').disabled = !isQuestion;
+
+    const btnNext = document.getElementById('qbtnNext');
+    if (isFinished) {
+      btnNext.textContent = '🏆 Revelar Ranking';
+      btnNext.style.background = '#c8a84b';
+      btnNext.style.color = '#000';
+    } else if (isRanking) {
+      btnNext.textContent = '← Trocar Quiz';
+      btnNext.style.background = '#1a2a40';
+      btnNext.style.color = '#7a9cc8';
+    } else {
+      btnNext.textContent = '▶ Próxima Questão';
+      btnNext.style.background = '';
+      btnNext.style.color = '';
+    }
+
+    const btnPrev = document.getElementById('qbtnPrev');
+    if (btnPrev) {
+      btnPrev.disabled = (state.currentIndex <= 0) || isSelectQuiz;
+      btnPrev.style.opacity = btnPrev.disabled ? '.3' : '1';
+    }
+
+    // Ranking de reações
+    const isOpenReveal = state.phase === 'reveal' && state.question?.type === 'open';
+    const hasOpenQs = state.questions?.some(q => q.type === 'open' && q.quizId === state.activeQuiz);
+    const btnRx = document.getElementById('qbtnReactionRanking');
+    if (btnRx) btnRx.style.display = (isOpenReveal || (isFinished && hasOpenQs)) ? 'block' : 'none';
+  }
+
   function renderQuizMain(state) {
     const main = document.getElementById('quiz-main');
     const phaseNames = { selectQuiz: 'Seleção', lobby: 'Lobby', question: 'Respondendo', reveal: 'Revelando', ranking: 'Ranking Final', finished: 'Encerrado' };
     document.getElementById('qPhaseLabel').textContent = phaseNames[state.phase] || state.phase;
     document.getElementById('qbtnReveal').disabled = state.phase !== 'question';
     document.getElementById('qAnswerTotal').textContent = state.participantCount || 0;
+    updateQControls(state);
 
     if (state.phase === 'lobby' || state.phase === 'selectQuiz') {
       const url = window.location.origin;
@@ -410,6 +461,24 @@
     if (!quizState) return;
     quizState = { ...quizState, ...state };
     renderQuizMain(quizState);
+  });
+
+  socket.on('reactionRankingData', ranking => {
+    const main = document.getElementById('quiz-main');
+    const medals = ['🥇','🥈','🥉'];
+    main.innerHTML = `
+      <div style="width:100%;max-width:700px;">
+        <div style="font-size:32px;font-weight:900;color:#c084fc;text-align:center;margin-bottom:20px;">💬 Ranking de Reações</div>
+        ${ranking.map((r,i) => {
+          const rx = r.rxCounts || {};
+          return `<div style="display:flex;align-items:center;gap:14px;background:var(--card);border-radius:12px;padding:12px 16px;margin-bottom:8px;${i<3?'border:1px solid var(--accent)':''}">
+            <span style="font-size:22px;">${i<3?medals[i]:r.rank+'º'}</span>
+            <span style="flex:1;font-size:16px;font-weight:700;">${r.name}</span>
+            <span style="font-size:13px;color:#7a9cc8;">👎${rx['-1']||0} 🤷${rx['0']||0} 👍${rx['1']||0} ❤️${rx['2']||0}</span>
+            <span style="color:#c084fc;font-weight:800;font-size:18px;">${r.rxTotal>0?'+':''}${r.rxTotal}</span>
+          </div>`;
+        }).join('')}
+      </div>`;
   });
 </script>
 </body>
