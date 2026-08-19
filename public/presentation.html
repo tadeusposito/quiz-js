@@ -164,14 +164,10 @@
   <!-- Direita: controles -->
   <div id="quiz-controls">
     <div class="qctrl-section">Controles</div>
-    <div style="display:flex;gap:6px;">
-      <button id="qbtnPrev" onclick="qcmd('prev')" style="background:#101e35;color:#7a9cc8;flex:0 0 44px;padding:14px 0;font-size:18px;border:none;border-radius:10px;cursor:pointer;" title="Questão anterior">◀</button>
-      <button class="qctrl-btn qctrl-next" id="qbtnNext" onclick="qbtnNextAction()" style="flex:1;">▶ Próxima Questão</button>
-    </div>
+    <button class="qctrl-btn qctrl-next"   id="qbtnNext"   onclick="qcmd('next')">▶ Próxima Questão</button>
     <button class="qctrl-btn qctrl-reveal" id="qbtnReveal" onclick="qcmd('reveal')" disabled>👁 Revelar Resposta</button>
-    <button class="qctrl-btn" id="qbtnReactionRanking" onclick="qshowReactionRanking()" style="background:#2a1a40;color:#c084fc;display:none;">💬 Ranking de Reações</button>
-    <button class="qctrl-btn qctrl-back" id="qbtnBackSelect" onclick="qcmd('backToSelect')">← Trocar Quiz</button>
-    <button class="qctrl-btn qctrl-reset" onclick="if(confirm('Reset total?')) qcmd('lobby')">↺ Reset Total</button>
+    <button class="qctrl-btn qctrl-back"   onclick="qcmd('backToSelect')">← Trocar Quiz</button>
+    <button class="qctrl-btn qctrl-reset"  onclick="if(confirm('Reset total?')) qcmd('lobby')">↺ Reset Total</button>
     <div style="margin-top:8px;">
       <div class="qctrl-section">Respostas</div>
       <div class="qctrl-stat"><strong id="qAnswerCount">0</strong> de <span id="qAnswerTotal">0</span> responderam</div>
@@ -327,59 +323,67 @@
     document.getElementById('slideIndicator').style.display = '';
   }
 
-  function qbtnNextAction() {
-    if (quizState?.phase === 'finished') qcmd('ranking');
-    else if (quizState?.phase === 'ranking') qcmd('backToSelect');
-    else qcmd('next');
+  function buildMediaHtml(q) {
+    // Mídia da revelação (se reveal) ou da questão
+    const isReveal = quizState?.phase === 'reveal';
+    const mediaUrl  = (isReveal && q.revealMediaUrl) ? q.revealMediaUrl  : q.mediaUrl;
+    const mediaType = (isReveal && q.revealMediaUrl) ? q.revealMediaType : q.mediaType;
+    if (!mediaUrl) return '';
+    if (mediaType === 'video') {
+      return `<video src="${mediaUrl}" controls playsinline class="quiz-media" style="width:100%;"></video>`;
+    }
+    return `<img src="${mediaUrl}" class="quiz-media" style="width:100%;">`;
   }
 
-  function qshowReactionRanking() {
-    socket.emit('reactionRanking', { pin: presenterPinCached });
-  }
-
-  function updateQControls(state) {
-    const isQuestion = state.phase === 'question';
-    const isFinished = state.phase === 'finished';
-    const isRanking  = state.phase === 'ranking';
-    const isSelectQuiz = state.phase === 'selectQuiz';
-
-    document.getElementById('qbtnReveal').disabled = !isQuestion;
-
-    const btnNext = document.getElementById('qbtnNext');
-    if (isFinished) {
-      btnNext.textContent = '🏆 Revelar Ranking';
-      btnNext.style.background = '#c8a84b';
-      btnNext.style.color = '#000';
-    } else if (isRanking) {
-      btnNext.textContent = '← Trocar Quiz';
-      btnNext.style.background = '#1a2a40';
-      btnNext.style.color = '#7a9cc8';
-    } else {
-      btnNext.textContent = '▶ Próxima Questão';
-      btnNext.style.background = '';
-      btnNext.style.color = '';
+  function buildOptsHtml(q, state) {
+    if (q.type === 'open' || q.type === 'wordcloud') {
+      const total = state.answerTotal || 0;
+      return `<div style="color:#7a9cc8;font-size:18px;text-align:center;padding:20px 0;">
+        ✏️ ${total} resposta${total!==1?'s':''} recebida${total!==1?'s':''}
+      </div>`;
     }
-
-    const btnPrev = document.getElementById('qbtnPrev');
-    if (btnPrev) {
-      btnPrev.disabled = (state.currentIndex <= 0) || isSelectQuiz;
-      btnPrev.style.opacity = btnPrev.disabled ? '.3' : '1';
+    if (q.type === 'poll') {
+      const total = state.answerTotal || 0;
+      const maxCount = state.answerCounts ? Math.max(...state.answerCounts, 1) : 1;
+      return `<div class="quiz-opts-grid" style="grid-template-columns:1fr;">${(q.optionLabels||[]).map((label,i)=>{
+        const count = state.answerCounts?.[i] || 0;
+        const pct = total > 0 ? Math.round(count/total*100) : 0;
+        const w = maxCount > 0 ? Math.round(count/maxCount*100) : 0;
+        return `<div class="quiz-opt-bar">
+          <div style="display:flex;justify-content:space-between;">
+            <span class="quiz-opt-label">${label}</span>
+            <span class="quiz-opt-count">${count} (${pct}%)</span>
+          </div>
+          <div class="quiz-opt-track"><div class="quiz-opt-fill fill-${i%5}" style="width:${w}%"></div></div>
+        </div>`;
+      }).join('')}</div>`;
     }
-
-    // Ranking de reações
-    const isOpenReveal = state.phase === 'reveal' && state.question?.type === 'open';
-    const hasOpenQs = state.questions?.some(q => q.type === 'open' && q.quizId === state.activeQuiz);
-    const btnRx = document.getElementById('qbtnReactionRanking');
-    if (btnRx) btnRx.style.display = (isOpenReveal || (isFinished && hasOpenQs)) ? 'block' : 'none';
+    // Múltipla escolha
+    const total = state.answerTotal || 0;
+    const maxCount = state.answerCounts ? Math.max(...state.answerCounts, 1) : 1;
+    const isReveal = state.phase === 'reveal' && q.correctIndex !== null;
+    return `<div class="quiz-opts-grid">${(q.optionLabels||[]).map((label,i)=>{
+      const count = state.answerCounts?.[i] || 0;
+      const pct = total > 0 ? Math.round(count/total*100) : 0;
+      const w = maxCount > 0 ? Math.round(count/maxCount*100) : 0;
+      const cls = isReveal ? (i===q.correctIndex ? 'correct-ans' : 'wrong-ans') : '';
+      const badge = isReveal && i===q.correctIndex ? ' ✅' : '';
+      return `<div class="quiz-opt-bar ${cls}">
+        <div class="quiz-opt-label">${label}${badge}</div>
+        <div class="quiz-opt-track"><div class="quiz-opt-fill fill-${i%4}" style="width:${w}%"></div></div>
+        <div class="quiz-opt-count">${count} (${pct}%)</div>
+      </div>`;
+    }).join('')}</div>`;
   }
 
   function renderQuizMain(state) {
     const main = document.getElementById('quiz-main');
+    if (!main) return;
     const phaseNames = { selectQuiz: 'Seleção', lobby: 'Lobby', question: 'Respondendo', reveal: 'Revelando', ranking: 'Ranking Final', finished: 'Encerrado' };
     document.getElementById('qPhaseLabel').textContent = phaseNames[state.phase] || state.phase;
     document.getElementById('qbtnReveal').disabled = state.phase !== 'question';
     document.getElementById('qAnswerTotal').textContent = state.participantCount || 0;
-    updateQControls(state);
+    document.getElementById('qAnswerCount').textContent = state.answerTotal || 0;
 
     if (state.phase === 'lobby' || state.phase === 'selectQuiz') {
       const url = window.location.origin;
@@ -387,50 +391,50 @@
         <div class="quiz-phase-label">📋 ${state.config?.quizNames?.[state.activeQuiz] || 'Quiz'}</div>
         <div class="quiz-qr-wrap"><canvas id="qr-canvas-main"></canvas></div>
         <div class="quiz-lobby-url">${url}</div>
-        <div class="quiz-lobby-count">Participantes: <strong>${state.participantCount || 0}</strong></div>
+        <div class="quiz-lobby-count">Participantes: <strong id="qLobbyCount">${state.participantCount || 0}</strong></div>
       </div>`;
       if (window.QRCode) QRCode.toCanvas(document.getElementById('qr-canvas-main'), url, { width: 180, margin: 1 });
+
     } else if ((state.phase === 'question' || state.phase === 'reveal') && state.question) {
       const q = state.question;
-      const total = state.answerTotal || 0;
-      const maxCount = state.answerCounts ? Math.max(...state.answerCounts, 1) : 1;
-      document.getElementById('qAnswerCount').textContent = total;
-      let optsHtml = '';
-      if (q.type === 'open' || q.type === 'wordcloud') {
-        optsHtml = `<div style="color:#7a9cc8;font-size:18px;text-align:center;">✏️ ${total} resposta${total!==1?'s':''} recebida${total!==1?'s':''}</div>`;
+      const mediaHtml = buildMediaHtml(q);
+      const optsHtml  = buildOptsHtml(q, state);
+      const label = `Questão ${(state.currentIndex||0)+1} de ${state.totalQuestions||'?'}`;
+
+      if (mediaHtml) {
+        // Layout com mídia: esquerda = mídia, direita = pergunta + opções
+        main.innerHTML = `<div class="quiz-with-media">
+          <div class="quiz-media-col">
+            <div class="quiz-phase-label">${label}</div>
+            ${mediaHtml}
+            <div class="quiz-prompt-big" style="font-size:clamp(16px,1.8vw,24px);">${q.prompt}</div>
+          </div>
+          <div class="quiz-content-col">${optsHtml}</div>
+        </div>`;
       } else {
-        optsHtml = `<div class="quiz-opts-grid">${(q.optionLabels||[]).map((label,i)=>{
-          const count = state.answerCounts?.[i] || 0;
-          const pct = total > 0 ? Math.round(count/total*100) : 0;
-          const w = maxCount > 0 ? Math.round(count/maxCount*100) : 0;
-          const isCorrect = state.phase==='reveal' && q.correctIndex===i;
-          return `<div class="quiz-opt-bar${isCorrect?' style="border-color:#4caf50"':''}">
-            <div class="quiz-opt-label">${label}</div>
-            <div class="quiz-opt-track"><div class="quiz-opt-fill fill-${i%4}" style="width:${w}%"></div></div>
-            <div class="quiz-opt-count">${count} (${pct}%)</div>
-          </div>`;
-        }).join('')}</div>`;
+        main.innerHTML = `
+          <div class="quiz-phase-label">${label}</div>
+          <div class="quiz-prompt-big">${q.prompt}</div>
+          ${optsHtml}`;
       }
-      main.innerHTML = `
-        <div class="quiz-phase-label">Questão ${state.currentIndex+1} de ${state.totalQuestions}</div>
-        <div class="quiz-prompt-big">${q.prompt}</div>
-        ${optsHtml}`;
-    } else if (state.phase === 'ranking' && state.ranking) {
+
+    } else if ((state.phase === 'ranking' || state.phase === 'finished') && state.ranking) {
       const medals = ['🥇','🥈','🥉'];
-      main.innerHTML = `<div style="width:100%;max-width:600px;">
-        <div style="font-size:32px;font-weight:900;color:var(--accent);text-align:center;margin-bottom:20px;">🏆 Ranking</div>
-        ${state.ranking.slice(0,8).map((r,i)=>`
-          <div style="display:flex;align-items:center;gap:14px;background:var(--card);border-radius:12px;padding:12px 16px;margin-bottom:8px;">
-            <span style="font-size:22px;">${i<3?medals[i]:r.rank+'º'}</span>
+      main.innerHTML = `<div style="width:100%;max-width:640px;overflow-y:auto;max-height:70vh;">
+        <div style="font-size:32px;font-weight:900;color:var(--accent);text-align:center;margin-bottom:20px;">🏆 Ranking Final</div>
+        ${state.ranking.slice(0,10).map((r,i)=>`
+          <div style="display:flex;align-items:center;gap:14px;background:var(--card);border-radius:12px;padding:12px 16px;margin-bottom:8px;${i<3?'border:1px solid var(--accent)':''}">
+            <span style="font-size:22px;min-width:36px;text-align:center;">${i<3?medals[i]:r.rank+'º'}</span>
             <span style="flex:1;font-size:16px;font-weight:700;">${r.name}</span>
-            <span style="color:var(--accent);font-weight:700;">${r.score} pts</span>
+            <span style="color:var(--accent);font-weight:800;font-size:18px;">${r.score} pts</span>
           </div>`).join('')}
       </div>`;
+
     } else if (state.phase === 'finished') {
       main.innerHTML = `<div style="text-align:center;">
         <div style="font-size:48px;margin-bottom:16px;">✅</div>
         <div style="font-size:24px;font-weight:800;color:var(--accent);">Quiz encerrado!</div>
-        <div style="font-size:14px;color:#7a9cc8;margin-top:8px;">Clique em Revelar Ranking quando quiser</div>
+        <div style="font-size:14px;color:#7a9cc8;margin-top:8px;">Clique em 🏆 Revelar Ranking quando quiser</div>
       </div>`;
     }
   }
@@ -461,24 +465,6 @@
     if (!quizState) return;
     quizState = { ...quizState, ...state };
     renderQuizMain(quizState);
-  });
-
-  socket.on('reactionRankingData', ranking => {
-    const main = document.getElementById('quiz-main');
-    const medals = ['🥇','🥈','🥉'];
-    main.innerHTML = `
-      <div style="width:100%;max-width:700px;">
-        <div style="font-size:32px;font-weight:900;color:#c084fc;text-align:center;margin-bottom:20px;">💬 Ranking de Reações</div>
-        ${ranking.map((r,i) => {
-          const rx = r.rxCounts || {};
-          return `<div style="display:flex;align-items:center;gap:14px;background:var(--card);border-radius:12px;padding:12px 16px;margin-bottom:8px;${i<3?'border:1px solid var(--accent)':''}">
-            <span style="font-size:22px;">${i<3?medals[i]:r.rank+'º'}</span>
-            <span style="flex:1;font-size:16px;font-weight:700;">${r.name}</span>
-            <span style="font-size:13px;color:#7a9cc8;">👎${rx['-1']||0} 🤷${rx['0']||0} 👍${rx['1']||0} ❤️${rx['2']||0}</span>
-            <span style="color:#c084fc;font-weight:800;font-size:18px;">${r.rxTotal>0?'+':''}${r.rxTotal}</span>
-          </div>`;
-        }).join('')}
-      </div>`;
   });
 </script>
 </body>
